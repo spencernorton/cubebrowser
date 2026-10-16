@@ -334,3 +334,9 @@ last two into `third_party/`.
 The bundled fonts are DejaVu Sans (free license). For a rounder look, run
 `python3 tools/make_font.py` with your own `.ttf` files (bold, regular,
 italic, monospace).
+
+---
+
+CubeBrowser is by [Arial-Bold](https://github.com/Arial-Bold/Cubebrowser). This
+is a fork maintained for integration into Indigo, used with permission; see
+[NOTICE.md](NOTICE.md).
