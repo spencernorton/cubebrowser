@@ -4,6 +4,7 @@ name: Build CubeBrowser
 
 on:
   push:
+  pull_request:
   workflow_dispatch:
 
 jobs:
@@ -11,7 +12,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Get the source code
-        uses: actions/checkout@v5
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Download mbedTLS
         run: sh get-mbedtls.sh
@@ -26,7 +27,7 @@ jobs:
           cp -r sd/gcbrowser package/
 
       - name: Upload result
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: cubebrowser
           path: package/
