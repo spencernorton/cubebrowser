@@ -165,6 +165,8 @@ static float num_or_pct(const char *s, float scale_pct) {
 static Color hsl_to_rgb(float h, float s, float l, float a) {
     h = fmodf(h, 360.0f);
     if (h < 0) h += 360;
+    s = clamp01(s);   /* a malformed saturation/lightness must not overflow the u8 channel cast below */
+    l = clamp01(l);
     float c = (1 - fabsf(2 * l - 1)) * s, x = c * (1 - fabsf(fmodf(h / 60.0f, 2) - 1)), m = l - c / 2;
     float r = 0, g = 0, b = 0;
     if (h < 60) { r = c; g = x; } else if (h < 120) { r = x; g = c; } else if (h < 180) { g = c; b = x; }
@@ -378,8 +380,9 @@ static const char *ident(Arena *a, const char **pp, const char *e, bool lower) {
     return r;
 }
 
-static bool parse_compound(Arena *a, const char **pp, const char *e, Compound *c, unsigned *spec) {
+static bool parse_compound(Arena *a, const char **pp, const char *e, Compound *c, unsigned *spec, int depth) {
     const char *p = *pp;
+    if (depth > 16) return false;   /* bail on pathological :is()/:not() nesting before the parse stack overflows */
     memset(c, 0, sizeof(*c));
     bool any = false;
     if (p < e && *p == '*') { p++; any = true; }
@@ -455,7 +458,7 @@ static bool parse_compound(Arena *a, const char **pp, const char *e, Compound *c
                 Compound *n = arena_alloc(a, sizeof(Compound));
                 unsigned s2 = 0;
                 const char *ap = skip_ws(arg, argend);
-                if (!n || !parse_compound(a, &ap, argend, n, &s2)) return false;
+                if (!n || !parse_compound(a, &ap, argend, n, &s2, depth + 1)) return false;
                 if (skip_ws(ap, argend) != argend) return false;   /* only simple :not() */
                 c->not_ = n;
             } else if (!strcmp(name, "is") || !strcmp(name, "where")) {
@@ -464,7 +467,7 @@ static bool parse_compound(Arena *a, const char **pp, const char *e, Compound *c
                 const char *ap = skip_ws(arg, argend);
                 Compound tmp;
                 unsigned s2 = 0;
-                if (!parse_compound(a, &ap, argend, &tmp, &s2) || skip_ws(ap, argend) != argend) return false;
+                if (!parse_compound(a, &ap, argend, &tmp, &s2, depth + 1) || skip_ws(ap, argend) != argend) return false;
                 if (tmp.tag && !c->tag) c->tag = tmp.tag;
                 for (int i = 0; i < tmp.ncls && c->ncls < 6; i++) c->cls[c->ncls++] = tmp.cls[i];
                 if (tmp.id) c->id = tmp.id;
@@ -488,7 +491,7 @@ static bool parse_selector(Arena *a, const char *s, const char *e, Selector *out
     const char *p = skip_ws(s, e);
     while (p < e) {
         if (n == 8) return false;
-        if (!parse_compound(a, &p, e, &tmp[n], &spec)) return false;
+        if (!parse_compound(a, &p, e, &tmp[n], &spec, 0)) return false;
         n++;
         const char *q = p;
         p = skip_ws(p, e);
@@ -626,13 +629,15 @@ static void parse_decls(CssSheet *sh, const char *p, const char *e, bool vars_gl
             p++;
         }
         const char *ve = p;
+        if (ve < vs) ve = vs;   /* a ';' inside a comment or string can stop the scan before the value starts */
         while (ve > vs && isspace((unsigned char)ve[-1])) ve--;
         if (p < e) p++;
         bool imp = false;
         if (ve - vs >= 10) {
-            const char *bang = ve;
+            const char *bang = ve - 1;   /* ve is one past the value; scan back from the last byte */
             while (bang > vs && *bang != '!') bang--;
-            if (*bang == '!' && !strncasecmp(skip_ws(bang + 1, ve), "important", 9)) { imp = true; ve = bang; }
+            const char *ip = skip_ws(bang + 1, ve);
+            if (*bang == '!' && ve - ip >= 9 && !strncasecmp(ip, "important", 9)) { imp = true; ve = bang; }
             while (ve > vs && isspace((unsigned char)ve[-1])) ve--;
         }
         size_t nl = (size_t)(ne - ns);

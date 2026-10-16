@@ -595,7 +595,7 @@ Dom *dom_parse(const char *src, size_t len, bool plain) {
                 /* collapse whitespace */
                 size_t o = 0;
                 bool sp = false;
-                for (char *p = buf; *p && o + 1 < sizeof(d->title); p++) {
+                for (char *p = buf; *p && o + 2 < sizeof(d->title); p++) {   /* room for a space + a char, then the NUL */
                     if (isspace((unsigned char)*p) || *p == 1) { sp = o > 0; continue; }
                     if (sp) { d->title[o++] = ' '; sp = false; }
                     d->title[o++] = *p;
