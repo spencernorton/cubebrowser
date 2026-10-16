@@ -132,6 +132,8 @@ const SetDef g_setdefs[] = {
       "Press twice to confirm. Hold L+R+START at boot to do this too." },
     { CAT_DATA, NULL, "Save settings now", ST_ACTION, 0, SA_SAVE_NOW, 0, 0, NULL, NULL,
       "Settings also save when you leave this screen." },
+    { CAT_DATA, NULL, "Exit to Indigo", ST_ACTION, 0, SA_EXIT, 0, 0, NULL, NULL,
+      "Press twice to leave the browser and return to the menu." },
 };
 const int g_setdef_count = sizeof(g_setdefs) / sizeof(g_setdefs[0]);
 

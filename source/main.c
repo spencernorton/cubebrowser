@@ -19,6 +19,12 @@
 
 enum { SCREEN_BROWSER, SCREEN_SETTINGS };
 
+/* Set from Settings > Exit to Indigo. Returning from main() hands control to
+ * the loader stub libogc leaves at 0x80001800, i.e. back to Indigo when it
+ * launched the browser. */
+static volatile bool quit_requested;
+void app_request_quit(void) { quit_requested = true; }
+
 static int screen = SCREEN_BROWSER;
 static int target_screen = SCREEN_BROWSER;
 static float trans = 1.0f;   /* 1 = finished */
@@ -116,6 +122,7 @@ int main(int argc, char **argv) {
         ui_end_frame();
         diag_note(DIAG_MAIN, "waiting for the GPU to finish the frame");
         gfx_end_frame();
+        if (quit_requested) break;
     }
     return 0;
 }

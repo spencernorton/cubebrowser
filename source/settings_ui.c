@@ -68,7 +68,7 @@ static void str_done(bool ok, const char *text, void *user) {
 
 static void run_action(int idx) {
     const SetDef *d = &g_setdefs[idx];
-    bool needs_confirm = (d->min == SA_CLEAR_BOOKMARKS || d->min == SA_RESET_ALL);
+    bool needs_confirm = (d->min == SA_CLEAR_BOOKMARKS || d->min == SA_RESET_ALL || d->min == SA_EXIT);
     if (needs_confirm && confirm_action != idx) {
         confirm_action = idx;
         ui_toast("Press again to confirm");
@@ -87,6 +87,10 @@ static void run_action(int idx) {
     case SA_SAVE_NOW:
         if (settings_save()) { dirty = false; ui_toast("Settings saved"); }
         else ui_toast("Couldn't save - is the SD card inserted?");
+        break;
+    case SA_EXIT:
+        if (dirty) settings_save();
+        app_request_quit();
         break;
     }
 }
