@@ -1,7 +1,10 @@
-/* storage.c - mounts the SD card through libfat. The SD2SP2 sits in Serial
- * Port 2; SD Gecko adapters in memory card slots A/B are tried as fallbacks. */
+/* storage.c - mounts the SD card through libfat: the SD2SP2 in Serial Port 2,
+ * an SD Gecko in memory card slot B or A, or the GC Loader's card. The card
+ * that already holds STORAGE_DIR wins, so the browser finds the files installed
+ * beside it; with none, the first card found gets the folder. */
 #include "storage.h"
 #include <fat.h>
+#include <ogc/dvd.h>
 #include <sdcard/gcsd.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -16,16 +19,25 @@ bool storage_init(void) {
         { &__io_gcsd2, "SD2SP2" },
         { &__io_gcsdb, "SD Gecko (slot B)" },
         { &__io_gcsda, "SD Gecko (slot A)" },
+        { &__io_gcode, "GC Loader" },
     };
+    int first = -1;
+    struct stat st;
     for (unsigned i = 0; i < sizeof(devs) / sizeof(devs[0]); i++) {
-        if (fatMountSimple("sd", devs[i].io)) {
+        if (!fatMountSimple("sd", devs[i].io)) continue;
+        if (stat(STORAGE_DIR, &st) == 0) {
             mounted = true;
             device = devs[i].name;
-            mkdir(STORAGE_DIR, 0777);
             return true;
         }
+        if (first < 0) first = i;
+        fatUnmount("sd");
     }
-    return false;
+    if (first < 0 || !fatMountSimple("sd", devs[first].io)) return false;
+    mounted = true;
+    device = devs[first].name;
+    mkdir(STORAGE_DIR, 0777);
+    return true;
 }
 
 bool storage_ok(void) { return mounted; }

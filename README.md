@@ -15,7 +15,7 @@ It runs as a `.dol` program launched from Swiss.
 |---|---|
 | A GameCube that runs Swiss | Swiss loads the browser like any other homebrew program. |
 | A network adapter | The official Nintendo Broadband Adapter, or a WIZnet-based adapter such as the ETH2GC. Plug it into your router with an Ethernet cable. |
-| An SD card adapter | SD2SP2 (recommended) or SD Gecko. Holds the browser, its certificates, settings and bookmarks. |
+| An SD card | In a GC Loader, an SD2SP2 or an SD Gecko. Holds the browser, its certificates, settings and bookmarks. |
 | A GameCube controller | In port 1. |
 
 Component cables are optional; they unlock 480p video.
@@ -38,7 +38,9 @@ at the end.)
 ### 2. Copy them to your SD card
 
 Put the `gcbrowser` folder in the **root** of the SD card, and the `.dol`
-anywhere you like:
+anywhere you like. The browser checks the SD2SP2, an SD Gecko in slot B or A
+and the GC Loader's card, in that order, and uses the first card that has
+`gcbrowser` (with none, the first card it finds):
 
 ```
 SD card
@@ -255,7 +257,7 @@ Older and hobbyist sites from the 1990s and 2000s usually display very well.
 | **The picture looks squashed or stretched** | Match Settings > Display > Aspect ratio to your TV's setting. |
 | **A download stopped partway** | Choose Retry, or open the same link again; it continues from where it stopped (on servers that allow it). |
 | **"Not enough space on the SD card"** | Free up space or use a larger card. FAT32 cards can't hold single files over 4 GB. |
-| **Settings or bookmarks aren't saved** | The SD card wasn't found. Make sure it's in the SD2SP2 (or SD Gecko) and formatted FAT32. |
+| **Settings or bookmarks aren't saved** | The SD card wasn't found. Make sure it's in the GC Loader, SD2SP2 or SD Gecko and formatted FAT32. |
 | **The pointer drifts on its own** | Raise Settings > Controller > Stick dead zone. |
 | **Something's wrong and I can't get back** | Hold L + R + START while launching to reset all settings. |
 

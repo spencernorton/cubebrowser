@@ -1,4 +1,4 @@
-/* storage.h - SD card (SD2SP2 / SD Gecko) mounting and file helpers. */
+/* storage.h - SD card (SD2SP2 / SD Gecko / GC Loader) mounting and file helpers. */
 #pragma once
 #include <stdbool.h>
 #include <stddef.h>
