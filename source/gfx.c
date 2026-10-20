@@ -157,6 +157,7 @@ static void load_matrix(void) {
     guMtxIdentity(m);
     m[0][0] = t_sx; m[1][1] = t_sy;
     m[0][3] = t_tx; m[1][3] = t_ty;
+    m[2][3] = -100.0f;   /* inside the depth range, not on the near plane: shapes crossing the screen edge clip cleanly */
     GX_LoadPosMtxImm(m, GX_PNMTX0);
     GX_SetCurrentMtx(GX_PNMTX0);
 }
