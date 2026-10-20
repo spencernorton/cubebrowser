@@ -1,7 +1,8 @@
 /* storage.c - mounts the SD card through libfat: the SD2SP2 in Serial Port 2,
- * an SD Gecko in memory card slot B or A, or the GC Loader's card. The card
- * that already holds STORAGE_DIR wins, so the browser finds the files installed
- * beside it; with none, the first card found gets the folder. */
+ * an SD Gecko in memory card slot B or A, or the GC Loader's card. The first
+ * card whose STORAGE_DIR holds the certificates wins, so the browser finds the
+ * files installed for it; failing that, the first card with the folder, then
+ * the first card found. */
 #include "storage.h"
 #include <fat.h>
 #include <ogc/dvd.h>
@@ -21,21 +22,22 @@ bool storage_init(void) {
         { &__io_gcsda, "SD Gecko (slot A)" },
         { &__io_gcode, "GC Loader" },
     };
-    int first = -1;
+    int best = -1, best_score = -1;
     struct stat st;
     for (unsigned i = 0; i < sizeof(devs) / sizeof(devs[0]); i++) {
         if (!fatMountSimple("sd", devs[i].io)) continue;
-        if (stat(STORAGE_DIR, &st) == 0) {
+        int score = stat(STORAGE_DIR "/cacert.pem", &st) == 0 ? 2 : stat(STORAGE_DIR, &st) == 0;
+        if (score == 2) {
             mounted = true;
             device = devs[i].name;
             return true;
         }
-        if (first < 0) first = i;
+        if (score > best_score) { best = i; best_score = score; }
         fatUnmount("sd");
     }
-    if (first < 0 || !fatMountSimple("sd", devs[first].io)) return false;
+    if (best < 0 || !fatMountSimple("sd", devs[best].io)) return false;
     mounted = true;
-    device = devs[first].name;
+    device = devs[best].name;
     mkdir(STORAGE_DIR, 0777);
     return true;
 }

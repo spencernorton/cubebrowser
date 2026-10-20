@@ -39,8 +39,9 @@ at the end.)
 
 Put the `gcbrowser` folder in the **root** of the SD card, and the `.dol`
 anywhere you like. The browser checks the SD2SP2, an SD Gecko in slot B or A
-and the GC Loader's card, in that order, and uses the first card that has
-`gcbrowser` (with none, the first card it finds):
+and the GC Loader's card, in that order, and uses the first card whose
+`gcbrowser` folder holds `cacert.pem` (failing that, the first card with a
+`gcbrowser` folder, then the first card it finds):
 
 ```
 SD card
