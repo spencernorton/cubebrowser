@@ -25,6 +25,7 @@ bool  gfx_apply_video_mode(int video_mode);  /* false if 480p requested without 
 void  gfx_set_widescreen(bool wide);
 bool  gfx_widescreen(void);
 float gfx_width(void);   /* 640 or 854 */
+GXRModeObj *gfx_mode(void);   /* the video mode on screen (the console lab's /xfb) */
 float gfx_height(void);  /* 480 */
 bool  gfx_has_component_cable(void);
 const char *gfx_mode_name(void);

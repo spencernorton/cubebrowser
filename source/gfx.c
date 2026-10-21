@@ -145,6 +145,8 @@ float gfx_width(void) { return vw; }
 float gfx_height(void) { return 480.0f; }
 bool gfx_has_component_cable(void) { return VIDEO_HaveComponentCable(); }
 
+GXRModeObj *gfx_mode(void) { return rmode; }
+
 const char *gfx_mode_name(void) {
     if (rmode->viTVMode & VI_NON_INTERLACE) return "480p";
     return rmode->xfbHeight > 480 ? "576i" : "480i";

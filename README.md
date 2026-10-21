@@ -15,7 +15,7 @@ It runs as a `.dol` program launched from Swiss.
 |---|---|
 | A GameCube that runs Swiss | Swiss loads the browser like any other homebrew program. |
 | A network adapter | The official Nintendo Broadband Adapter, or a WIZnet-based adapter such as the ETH2GC. Plug it into your router with an Ethernet cable. |
-| An SD card | In a GC Loader, an SD2SP2 or an SD Gecko. Holds the browser, its certificates, settings and bookmarks. |
+| An SD card | In a GC Loader, an SD2SP2 or an SD Gecko. Holds the browser, its certificates, settings and bookmarks. The browser can't read a FlippyDrive's card: with only a FlippyDrive, secure (https) pages fail and nothing is saved. |
 | A GameCube controller | In port 1. |
 
 Component cables are optional; they unlock 480p video.
@@ -290,6 +290,33 @@ Older and hobbyist sites from the 1990s and 2000s usually display very well.
 
 ---
 
+## Console lab
+
+For testing on a real console with nobody there. Started with the argument
+`lab=1`, which Indigo passes when its own console lab (`LabServer=Yes`) is
+on, the browser answers on TCP port 4300 the same requests as Indigo's lab,
+so a test run can follow Indigo into the Web face:
+
+| Request | What it does |
+|---|---|
+| `GET /xfb` | The picture on screen, raw YUYV; `X-Size` gives its size |
+| `GET /log` | Pages opened, messages shown and the network's state |
+| `GET /pad` | How long since a real controller's button went down |
+| `POST /pad?press=A,Right&hold=150` | Presses buttons on a virtual controller |
+| `POST /open?url=<address>` | Opens an address, as if typed in the address bar |
+| `POST /point?x=<px>&y=<px>` | Moves the pointer there |
+| `POST /reset` | Restarts the console, back to what it starts (Indigo) |
+
+A POST needs an `X-Lab` header, which no web page can send. Without `lab=1`
+the port stays closed. While the lab is on, anyone on your network can see
+the screen and the addresses you open, so keep it for testing. A crash
+screen then restarts the console after 10 seconds, and so do 15 minutes
+with no request and no button pressed (`deadline=<seconds>`, `0` = never),
+so a failed test never needs the Reset button. `sd=0` beside `lab=1` keeps
+the browser off its SD card, for a run that must not write it.
+
+---
+
 ## Building from source
 
 The easiest way is GitHub Actions, which builds on GitHub's servers with
@@ -331,6 +358,7 @@ last two into `third_party/`.
 | `source/download.c`, `source/unzip.c`, `source/inflate.c` | File downloads, zip extraction |
 | `source/gfx.c`, `source/ui.c`, `source/osk.c` | Graphics, menus, on-screen keyboard |
 | `source/settings*.c`, `source/input.c`, `source/sound.c` | Settings, controller, sound |
+| `source/lab.c`, `source/ui_lab.c` | The console lab, off unless started with `lab=1` |
 | `tools/make_font.py` | Regenerates the built-in fonts |
 | `sd/gcbrowser/` | Files for the SD card |
 
