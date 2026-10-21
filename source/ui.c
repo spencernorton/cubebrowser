@@ -4,6 +4,7 @@
 #include "input.h"
 #include "settings.h"
 #include "sound.h"
+#include "lab.h"
 #include <math.h>
 #include <stdio.h>
 #include <string.h>
@@ -345,6 +346,7 @@ void ui_draw_cursor(void) {
 }
 
 void ui_toast(const char *msg) {
+    lab_note("toast: %s", msg);
     snprintf(toast_msg, sizeof(toast_msg), "%s", msg);
     toast_until = frame + 150;
 }

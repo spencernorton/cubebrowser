@@ -16,6 +16,7 @@
 #include "osk.h"
 #include "browser.h"
 #include "diag.h"
+#include "lab.h"
 
 enum { SCREEN_BROWSER, SCREEN_SETTINGS };
 
@@ -63,8 +64,7 @@ static void draw_transition(int from, int to, float p) {
 }
 
 int main(int argc, char **argv) {
-    (void)argc; (void)argv;
-    bool sd = storage_init();
+    bool sd = lab_init(argc, argv) && storage_init();   /* the console lab: off unless started with lab=1 */
     diag_init();
     settings_load();
     gfx_init(g_set.video_mode, g_set.widescreen != 0);
@@ -87,11 +87,13 @@ int main(int argc, char **argv) {
     sound_init();
     fetch_init();
     browser_init();
+    lab_start();
 
     if (reset) ui_toast("Settings were reset to defaults");
     else if (!sd) ui_toast("No SD card found - settings and bookmarks won't be saved");
 
     for (;;) {
+        lab_frame();
         diag_frame();
         diag_note(DIAG_MAIN, "reading controller");
         input_update();

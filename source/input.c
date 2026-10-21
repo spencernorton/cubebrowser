@@ -4,6 +4,7 @@
 #include "settings.h"
 #include "gfx.h"
 #include "gc_entropy.h"
+#include "lab.h"
 #include <math.h>
 
 const char *const action_names[ACT_COUNT] = {
@@ -49,6 +50,13 @@ void input_update(void) {
     prev_held = held;
     held = PAD_ButtonsHeld(0);
     down = PAD_ButtonsDown(0);
+    {   /* console lab: the virtual pad's buttons join the controller's */
+        static u32 vprev;
+        u32 v = lab_pad(down);
+        held |= v;
+        down |= v & ~vprev;
+        vprev = v;
+    }
     consumed = 0;
 
     s8 sx = PAD_StickX(0), sy = PAD_StickY(0);

@@ -14,6 +14,13 @@ jobs:
       - name: Get the source code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
+      - name: Test the console lab's request parser
+        # ui_lab.c and its test are Indigo's, copied unchanged.
+        run: |
+          gcc -std=gnu11 -Wall -Wextra -Werror -fsanitize=address,undefined -no-pie \
+            -Isource tools/lab/test_ui_lab.c source/ui_lab.c -o "$RUNNER_TEMP/test_ui_lab"
+          "$RUNNER_TEMP/test_ui_lab"
+
       - name: Download mbedTLS
         run: sh get-mbedtls.sh
 

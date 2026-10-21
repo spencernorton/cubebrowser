@@ -11,6 +11,7 @@
 #include "storage.h"
 #include "sound.h"
 #include "url.h"
+#include "lab.h"
 #include "image.h"
 #include "diag.h"
 #include "unzip.h"
@@ -303,6 +304,7 @@ static void start_load(const char *url, const char *post) {
 
 static void navigate(const char *url, const char *post, bool record) {
     if (!url[0]) return;
+    lab_note("open: %s%s", url, post ? " (form post)" : "");
     if (record) {
         push_history();
         clear_forward();
