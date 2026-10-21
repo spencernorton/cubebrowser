@@ -152,6 +152,10 @@ const char *gfx_mode_name(void) {
 
 /* ------------------------------------------------------------------ frame */
 
+/* The clip box in drawing coordinates, a pixel wider than the scissor, which
+ * makes the exact edge; gfx_rect_vgrad keeps rectangles inside it. */
+static float clip_x0 = -1e9f, clip_y0 = -1e9f, clip_x1 = 1e9f, clip_y1 = 1e9f;
+
 static void load_matrix(void) {
     Mtx m;
     guMtxIdentity(m);
@@ -192,6 +196,7 @@ void gfx_reset_transform(void) { gfx_set_transform(1, 1, 0, 0); }
 
 void gfx_set_clip(float x, float y, float w, float h) {
     if (!isfinite(x) || !isfinite(y) || !isfinite(w) || !isfinite(h)) { gfx_clear_clip(); return; }
+    clip_x0 = x - 1; clip_y0 = y - 1; clip_x1 = x + w + 1; clip_y1 = y + h + 1;
     float x0 = x * t_sx + t_tx, y0 = y * t_sy + t_ty;
     float x1 = (x + w) * t_sx + t_tx, y1 = (y + h) * t_sy + t_ty;
     float kx = rmode->fbWidth / vw, ky = rmode->efbHeight / 480.0f;
@@ -204,7 +209,10 @@ void gfx_set_clip(float x, float y, float w, float h) {
     GX_SetScissor(px, py, pw, ph);
 }
 
-void gfx_clear_clip(void) { GX_SetScissor(0, 0, rmode->fbWidth, rmode->efbHeight); }
+void gfx_clear_clip(void) {
+    clip_x0 = clip_y0 = -1e9f; clip_x1 = clip_y1 = 1e9f;
+    GX_SetScissor(0, 0, rmode->fbWidth, rmode->efbHeight);
+}
 
 /* ------------------------------------------------------------------ state */
 
@@ -253,12 +261,18 @@ void gfx_rect(float x, float y, float w, float h, Color c) { gfx_rect_vgrad(x, y
 
 void gfx_rect_vgrad(float x, float y, float w, float h, Color top, Color bottom) {
     if (!(w > 0) || !(h > 0) || !isfinite(x) || !isfinite(y) || !isfinite(w) || !isfinite(h)) return;
+    /* Cut the rectangle to the clip box here, not only with the scissor. A page's
+     * background runs far past the screen, and once GX clips such a rectangle a
+     * later shape can get a corner at the wrong height: a wedge down the page. */
+    float x0 = fmaxf(x, clip_x0), y0 = fmaxf(y, clip_y0), x1 = fminf(x + w, clip_x1), y1 = fminf(y + h, clip_y1);
+    if (x0 >= x1 || y0 >= y1) return;
+    Color c0 = color_lerp(top, bottom, (y0 - y) / h), c1 = color_lerp(top, bottom, (y1 - y) / h);
     mode_color();
     GX_Begin(GX_QUADS, GX_VTXFMT0, 4);
-    vtx(x, y, top);
-    vtx(x + w, y, top);
-    vtx(x + w, y + h, bottom);
-    vtx(x, y + h, bottom);
+    vtx(x0, y0, c0);
+    vtx(x1, y0, c0);
+    vtx(x1, y1, c1);
+    vtx(x0, y1, c1);
     GX_End();
 }
 
