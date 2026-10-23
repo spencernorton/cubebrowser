@@ -20,7 +20,8 @@
 
 enum { SCREEN_BROWSER, SCREEN_SETTINGS };
 
-/* Set from Settings > Exit to Indigo. Returning from main() hands control to
+/* Set from the browser's Return to Indigo button or Settings > Exit to Indigo.
+ * Returning from main() hands control to
  * the loader stub libogc leaves at 0x80001800, i.e. back to Indigo when it
  * launched the browser. */
 static volatile bool quit_requested;

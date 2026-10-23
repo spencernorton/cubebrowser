@@ -117,6 +117,16 @@ loading), **Home**, the **address bar**, **Bookmarks** (star) and
 **Settings** (gear). A green lock in the address bar means the site's
 security certificate was checked successfully.
 
+### Returning to Indigo
+
+Click **Return to Indigo** at the bottom-left of the browsing screen. It is
+visible on every page and returns with one press, without opening Settings.
+The button is unavailable while a download, bookmarks or keyboard dialog is
+open; finish or close that dialog first.
+
+Returning restarts the Indigo installed on your card. A test build launched
+from RAM does not replace that installed version.
+
 ### Bookmarks
 
 Press **Y** to open your bookmarks. Click **Bookmark this page** to add the
