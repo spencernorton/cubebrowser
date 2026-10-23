@@ -1094,6 +1094,12 @@ void browser_frame(bool interactive) {
 
     /* ---- status bar */
     float sbx = sx + 14, sby = sy + sh - 28;
+    const float return_w = 152;
+    if (ui_button(ui_id("return-indigo", 0), sbx, sby - 5, return_w, 30,
+                  "Return to Indigo", 16, UIB_NORMAL)) {
+        app_request_quit();
+    }
+    sbx += return_w + 12;
     char status[300];
     if (loading) {
         int kb = fetch_progress() / 1024;
