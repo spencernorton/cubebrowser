@@ -7,12 +7,34 @@ on:
   pull_request:
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     steps:
       - name: Get the source code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Cache the pinned emulator image
+        id: emulator-cache
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: /tmp/cube-emulator.tar
+          key: cube-emulator-amd64-${{ hashFiles('tests/runtime/Dockerfile', 'tests/runtime/dolphin/*.patch') }}
+
+      - name: Prepare the emulator
+        run: |
+          if [ -f /tmp/cube-emulator.tar ]; then
+            docker load -i /tmp/cube-emulator.tar
+          else
+            docker build -t cube-runtime tests/runtime
+            docker save cube-runtime -o /tmp/cube-emulator.tar
+          fi
 
       - name: Test the console lab's request parser
         # ui_lab.c and its test are Indigo's, copied unchanged.
@@ -25,7 +47,24 @@ jobs:
         run: sh get-mbedtls.sh
 
       - name: Build the .dol
-        run: docker run --rm -v "$PWD:/src" -w /src ghcr.io/extremscorner/libogc2:latest make
+        run: docker run --rm -v "$PWD:/src" -w /src ghcr.io/extremscorner/libogc2@sha256:f9ffb7e33c4ba4010da8e40c01366f7c24732130146abd99690403bd42d3e4c2 make
+
+      - name: Boot and use this candidate
+        run: |
+          docker network create --internal --subnet 192.0.2.0/24 cube-runtime
+          trap 'docker network rm cube-runtime' EXIT
+          docker run --rm --network cube-runtime --ip 192.0.2.3 --cpus 2 --memory 3g \
+            -v "$PWD:/work" cube-runtime \
+            python3 tests/runtime/run.py --dol cubebrowser.dol --card-files sd/gcbrowser --out runtime-evidence
+
+      - name: Runtime evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: browser-runtime-evidence
+          path: runtime-evidence/
+          if-no-files-found: warn
+          retention-days: 14
 
       - name: Gather files for the SD card
         run: |
