@@ -1,3 +1,13 @@
+## 2026-10-29 — Boot and browser behavior gate
+
+The required build now boots its own DOL with an emulated SD card, Broadband
+Adapter and controller. It must fetch fixture HTML and PNG, render the image,
+open and close Bookmarks and Settings, follow a link and go Back. The fixture
+network has no internet access. Pin the SDK and emulator sources; preserve
+screens, requests, DOL SHA-256 and emulator logs. The route passes against the
+existing console-qualified DOL. Physical adapters and return to a resident
+Indigo remain console qualifications.
+
 ## 2026-10-23 — Return button validated on the console
 
 The target build passes on the pinned libogc2 SDK. CI39945054030 passes,
