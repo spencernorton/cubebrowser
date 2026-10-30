@@ -24,6 +24,7 @@ int main(void) {
     assert(!strcmp(g_launch.device,"gcldr"));launch_capture(&g_set);launch_apply(&g_set);
     assert(g_set.widescreen==1 && g_set.video_mode==2 && g_set.margin==6 && !g_set.animations);
     assert(!g_set.sounds && !g_set.rumble && g_set.tz_minutes==840 && !g_set.dst);
+    assert(launch_console_utc(100000)==100000-840*60);
     assert(!strcmp(g_set.home,"https://example.org/custom"));g_set.search_engine=2;
     assert(settings_save());assert(strstr(output,"disp.theme=2\n") && strstr(output,"disp.anim=1\n"));
     assert(strstr(output,"web.search=2\n") && strstr(output,"web.home=https://example.org/custom\n"));
@@ -34,6 +35,7 @@ int main(void) {
     char *bad[]={"browser","indigo.context=1","indigo.wide=99999999999999999999999999","indigo.margin=-1",
         "indigo.timezone=-721","indigo.device=../../other","indigo.color=1","indigo.video=480p-extra","indigo.rumble=1x"};
     parse(bad,9);assert(g_launch.active && g_launch.wide==INT_MIN && g_launch.margin==INT_MIN);
+    assert(launch_console_utc(100000)==100000);
     assert(g_launch.timezone==INT_MIN && !g_launch.device[0] && g_launch.color==-1 && g_launch.video==INT_MIN);
     assert(g_launch.rumble==INT_MIN);launch_apply(&g_set);assert(!memcmp(&g_set,&before,sizeof(before)));
     puts("launch: version, bounds, named colors, card origin, saved overrides and persistence pass");

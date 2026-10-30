@@ -1,6 +1,7 @@
 /* netio.c - BBA networking via libogc's lwIP stack, a small DNS client (so a
  * custom DNS server can be used), and an SNTP client for the clock. */
 #include "netio.h"
+#include "launch.h"
 #include "settings.h"
 #include "gc_entropy.h"
 #include "dns_cache.h"
@@ -229,5 +230,5 @@ bool netio_time_synced(void) { return time_synced; }
 
 time_t netio_now(void) {
     if (time_synced) return (time_t)(time_base + (s64)ticks_to_secs(gettime()));
-    return time(NULL);
+    return (time_t)launch_console_utc(time(NULL));
 }

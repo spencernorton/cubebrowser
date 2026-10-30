@@ -33,3 +33,9 @@ A saved `web.home`, including `about:home`, takes precedence over the new defaul
 The native chrome font uses the SDK's IPL font reader at runtime, with cached
 ASCII glyph metrics and a baked-font fallback. Page fonts and author styles
 are independent. No console ROM font bytes are distributed.
+
+Indigo's RTC contains local wall time. A known inherited offset normalizes that
+fallback clock to UTC for TLS and preference expiry; a network time response
+already supplies UTC. With no known offset, the integrated display keeps the
+console's local clock rather than inventing a UTC zone. Time controls stay in
+Indigo. Standalone time preferences remain intact.

@@ -3,6 +3,8 @@
 #include "page.h"
 #include "page_images.h"
 #include "start_pref.h"
+#include "launch.h"
+#include <limits.h>
 #include "fetch.h"
 #include "netio.h"
 #include "ui.h"
@@ -949,7 +951,8 @@ static void draw_bookmarks(bool interactive) {
 
 static void draw_clock(float right_x, float y) {
     const Theme *t = theme();
-    time_t now = netio_now() + g_set.tz_minutes * 60 + (g_set.dst ? 3600 : 0);
+    time_t now = g_launch.active && g_launch.timezone == INT_MIN ? time(NULL) :
+        netio_now() + g_set.tz_minutes * 60 + (g_set.dst ? 3600 : 0);
     struct tm tmv;
     gmtime_r(&now, &tmv);
     char buf[16];

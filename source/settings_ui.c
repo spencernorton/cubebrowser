@@ -181,6 +181,8 @@ bool settings_ui_frame(bool interactive) {
     int idxs[64], n = 0;
     for (int i = 0; i < g_setdef_count && n < 64; i++)
         if (g_setdefs[i].cat == category && !launch_inherits(&g_setdefs[i])) idxs[n++] = i;
+    if (n == 0 && g_launch.active)
+        gfx_text(FONT_CHROME, 18, ox+20, rows_y+20, t->text_dim, "These preferences follow Indigo.", -1);
     float content_h = n * row_h;
     if (input_ok) {
         scroll_target += input_scroll_delta() * 0.5f;
