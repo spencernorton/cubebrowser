@@ -16,7 +16,7 @@ It runs as a `.dol` program launched from Swiss.
 | A GameCube that runs Swiss | Swiss loads the browser like any other homebrew program. |
 | A network adapter | The official Nintendo Broadband Adapter, or a WIZnet-based adapter such as the ETH2GC. Plug it into your router with an Ethernet cable. |
 | An SD card | In a GC Loader, an SD2SP2 or an SD Gecko. Holds the browser, its certificates, settings and bookmarks. The browser can't read a FlippyDrive's card: with only a FlippyDrive, secure (https) pages fail and nothing is saved. |
-| A GameCube controller | In port 1. |
+| A GameCube controller | Any of the four ports. |
 
 Component cables are optional; they unlock 480p video.
 
@@ -82,12 +82,12 @@ you're online and the start page is ready.
 | B | Back |
 | X | Type an address or search |
 | Y | Bookmarks |
-| START | Settings |
+| START | Browser menu |
 | C-Stick | Scroll the page |
 | L / R | Page up / page down |
 | D-Pad | Jump the pointer between links and buttons |
 
-Every button except the D-Pad can be changed in Settings > Controller.
+Any controller can take over once the current controller is neutral. A held or drifting secondary controller must return to neutral first. Every button except the D-Pad can be changed in Settings > Controller.
 
 ### Going to a website or searching
 
@@ -112,14 +112,14 @@ When typing an address, a row of shortcut keys (`https://`, `www.`, `.com`,
 
 ### The toolbar
 
-From left to right: **Back**, **Forward**, **Reload** (becomes **Stop** while
-loading), **Home**, the **address bar**, **Bookmarks** (star) and
-**Settings** (gear). A green lock in the address bar means the site's
+From left to right: **< Indigo**, the **address bar**, **Bookmarks** (star)
+and the **browser menu** (gear). Home, Forward, Reload/Stop and Browser settings
+are in that menu, also opened with START. A green lock in the address bar means the site's
 security certificate was checked successfully.
 
 ### Returning to Indigo
 
-Click **Return to Indigo** at the bottom-left of the browsing screen. It is
+Click **< Indigo** at the top-left of the browsing screen. It is
 visible on every page and returns with one press, without opening Settings.
 The button is unavailable while a download, bookmarks or keyboard dialog is
 open; finish or close that dialog first.
@@ -191,20 +191,25 @@ no network) and the time.
 - **File downloads** straight to the SD card, with resume, progress and
   speed display, and automatic unzipping.
 - **History** with Back and Forward, and **bookmarks** saved to the SD card.
-- **Four themes** named after the console colours: Indigo, Jet Black,
-  Platinum and Spice.
+- **Native Indigo chrome** with an IPL font read from the console ROM and
+  the launcher's named menu colour. Standalone page-theme IDs remain compatible.
 - **4:3 and 16:9** display, 480i or 480p, and adjustable screen margins for
   TVs that cut off the edges.
 - **Fully remappable controls**, pointer speed and acceleration, D-Pad
   snapping, and rumble feedback.
 - **Synthesized sound effects** and smooth, animated menus.
-- **Built-in start page** with links to sites that work well.
+- A lightweight [Indigo Web start page](https://norvitech.com/indigo/start/)
+  with search and controls help. Saved custom home pages stay set; `about:home`
+  opens an offline page with shortcuts.
 
 ---
 
 ## Settings
 
-Press **START** to open Settings. Changes apply immediately and are saved when
+Press **START**, then choose **Browser settings**. Browsing options open first.
+When Indigo launches the browser, inherited display, motion, sound, rumble and
+time preferences stay in Indigo; the corresponding browser controls are hidden
+and the standalone values are preserved when saving. Changes apply immediately and are saved when
 you leave the Settings screen. Hold **L + R + START** while the browser starts
 to reset everything to defaults.
 
@@ -348,13 +353,16 @@ If a build fails, click the run, then the failed step, to see the error.
 
 ```sh
 ./get-mbedtls.sh
-docker run --rm -v "$PWD:/src" -w /src ghcr.io/extremscorner/libogc2:latest make
+docker run --rm -v "$PWD:/src" -w /src ghcr.io/extremscorner/libogc2@sha256:f9ffb7e33c4ba4010da8e40c01366f7c24732130146abd99690403bd42d3e4c2 make
 ```
 
 The build uses [libogc2](https://libogc2.org/) (for official and WIZnet
 network adapters), [mbedTLS 3.6](https://github.com/Mbed-TLS/mbedtls) and
 [stb_image](https://github.com/nothings/stb). `get-mbedtls.sh` downloads the
 last two into `third_party/`.
+
+The named, versioned DOL launch contract is documented in
+[docs/launch-context.md](docs/launch-context.md).
 
 ### Project layout
 

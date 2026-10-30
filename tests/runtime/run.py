@@ -27,6 +27,9 @@ def main():
     p.add_argument("--out", type=Path, required=True)
     p.add_argument("--cpu-core", type=int, choices=(0, 1, 3, 5), default=None,
                    help="Explicit Dolphin core override, e.g. 5 for the cached interpreter on ARM hosts")
+    p.add_argument("--wide", action="store_true", help="Use anamorphic 16:9 browser layout")
+    p.add_argument("--pal", action="store_true", help="Use PAL interlaced video")
+    p.add_argument("--pad-port", type=int, choices=(1, 2, 3, 4), default=1)
     args = p.parse_args()
     out = args.out.resolve()
     out.mkdir(parents=True, exist_ok=True)
@@ -82,7 +85,7 @@ def main():
             sp.run(["mkfs.fat", "-F", "32", "-s", "8", str(card)], check=True, stdout=sp.DEVNULL)
             sp.run(["mcopy", "-i", str(card), "-s", str(args.card_files.resolve()), "::/"], check=True)
             settings = work / "settings.ini"
-            settings.write_text("web.home=http://192.0.2.3:18080/first\nweb.imgproxy=0\nnet.ntp=\ndisp.anim=0\n")
+            settings.write_text(f"web.home=http://192.0.2.3:18080/first\nweb.imgproxy=0\nnet.ntp=\ndisp.anim=0\ndisp.aspect={int(args.wide)}\ndisp.video={1 if args.pal else 0}\n")
             sp.run(["mcopy", "-i", str(card), str(settings), "::/gcbrowser/settings.ini"], check=True)
             user = work / "user"
             config = user / "Config"
@@ -93,10 +96,10 @@ DSPHLE = False
 DSPThread = False
 MMU = True
 GFXBackend = OGL
-SIDevice0 = 6
-SIDevice1 = 0
-SIDevice2 = 0
-SIDevice3 = 0
+SIDevice0 = {6 if args.pad_port == 1 else 0}
+SIDevice1 = {6 if args.pad_port == 2 else 0}
+SIDevice2 = {6 if args.pad_port == 3 else 0}
+SIDevice3 = {6 if args.pad_port == 4 else 0}
 SlotA = 255
 SlotB = 255
 SerialPort2 = 15
@@ -118,7 +121,7 @@ RenderToMain = True
 """)
             (config / "GFX.ini").write_text("[Settings]\nInternalResolution = 1\nSafeTextureCacheColorSamples = 0\n")
             (config / "Logger.ini").write_text("[Logs]\nOSREPORT = True\nPOWERPC = True\nSP1 = True\n[Options]\nVerbosity = 1\nWriteToConsole = True\n")
-            (config / "GCPadNew.ini").write_text(dsu_pad.GCPAD_INI)
+            (config / "GCPadNew.ini").write_text(dsu_pad.GCPAD_INI.replace("[GCPad1]", f"[GCPad{args.pad_port}]"))
             (config / "DSUClient.ini").write_text(f"[Server]\nEnabled = True\nEntries = {dsu_pad.DESCRIPTION}:127.0.0.1:{pad.port};\n")
             read, write = os.pipe()
             x = sp.Popen(["Xvfb", "-displayfd", str(write), "-screen", "0", "640x480x24", "-nolisten", "tcp"],
@@ -129,7 +132,7 @@ RenderToMain = True
                 display = ":" + f.readline().strip()
             env = dict(os.environ, DISPLAY=display, LIBGL_ALWAYS_SOFTWARE="1", DOLPHIN_TICKS="1", DOLPHIN_DABR="1")
             dol = sp.Popen(["dolphin-emu-nogui", "-u", str(user), "-p", "x11", "-v", "OGL",
-                            "-C", "Dolphin.Core.FallbackRegion=1", "-C", "SYSCONF.IPL.PGS=True", "-e", str(args.dol.resolve())],
+                            "-C", f"Dolphin.Core.FallbackRegion={2 if args.pal else 1}", "-C", f"SYSCONF.IPL.PGS={not args.pal}", "-e", str(args.dol.resolve())],
                            stdout=open(out / "dolphin.log", "w"), stderr=sp.STDOUT, env=env)
             processes.append(dol)
             def frame(name):
@@ -154,7 +157,7 @@ RenderToMain = True
             first = rgb.copy()
             def changed(a, b):
                 return np.count_nonzero(np.max(np.abs(a[80:435, 28:612].astype(int) - b[80:435, 28:612].astype(int)), axis=2) > 12)
-            for button, name in [("Y", "bookmarks"), ("B", "bookmarks-closed"), ("START", "settings"), ("B", "settings-closed")]:
+            for button, name in [("Y", "bookmarks"), ("B", "bookmarks-closed"), ("START", "menu"), ("B", "menu-closed")]:
                 pad.press(button, 0.2)
                 time.sleep(2)
                 rgb = frame(name)
@@ -186,14 +189,48 @@ RenderToMain = True
             # D-pad focus adds the real link outline and moves the pointer.
             if int(magenta.sum()) < 10000 or changed(first, rgb) > 6000:
                 raise RuntimeError("Back did not restore the first page")
+            # The menu starts on Home, so four Down presses reach browser settings.
+            pad.press("START", .2)
+            time.sleep(2)
+            for _ in range(4):
+                pad.press("DOWN", .12)
+                time.sleep(1)
+            pad.press("A", .2)
+            time.sleep(2)
+            rgb = frame("settings")
+            if changed(first, rgb) < 10000:
+                raise RuntimeError("Browser settings did not open from the menu")
+            pad.press("B", .2)
+            time.sleep(2)
+            rgb = frame("settings-closed")
+            magenta = (rgb[:, :, 0] > 180) & (rgb[:, :, 1] < 70) & (rgb[:, :, 2] > 140)
+            if int(magenta.sum()) < 10000:
+                raise RuntimeError("Browser settings did not close")
+            pad.press("X", .2)
+            time.sleep(2)
+            rgb = frame("keyboard")
+            if changed(first, rgb) < 10000:
+                raise RuntimeError("Address keyboard did not open")
+            previous = requests.count("/first")
+            pad.press("START", .2)
+            until = time.monotonic() + 60
+            while time.monotonic() < until:
+                time.sleep(2)
+                rgb = frame("keyboard-accepted")
+                magenta = (rgb[:, :, 0] > 180) & (rgb[:, :, 1] < 70) & (rgb[:, :, 2] > 140)
+                if requests.count("/first") > previous and int(magenta.sum()) > 10000:
+                    break
+            else:
+                raise RuntimeError("Address keyboard did not accept and reload the page")
             log = (out / "dolphin.log").read_text(errors="replace")
             if not {"/first", "/second"}.issubset(encodings):
                 raise RuntimeError("Candidate did not request both gzip pages")
             if re.search(r"Invalid (?:read|write)|DSI exception|ISI exception|Unhandled exception", log, re.I):
                 raise RuntimeError("Dolphin reported an invalid access or CPU exception")
             (out / "result.json").write_text(json.dumps({"dol_sha256": hashlib.file_digest(args.dol.open("rb"), "sha256").hexdigest(),
-                                                         "requests": requests, "gzip_pages": encodings, "passed": True}, indent=2) + "\n")
-            print("PASS: candidate booted, rendered HTML/PNG, opened and closed menus, followed a link and went back", flush=True)
+                                                         "requests": requests, "gzip_pages": encodings, "wide": args.wide, "pal": args.pal,
+                                                         "pad_port": args.pad_port, "settings_keyboard": True, "passed": True}, indent=2) + "\n")
+            print("PASS: candidate booted, rendered HTML/PNG, opened menus/settings/keyboard, followed a link and went back", flush=True)
     finally:
         for proc in reversed(processes):
             proc.terminate()

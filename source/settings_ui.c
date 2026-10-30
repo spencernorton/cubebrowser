@@ -2,6 +2,7 @@
  * change applies immediately; the file is saved when you leave the screen. */
 #include "settings_ui.h"
 #include "settings.h"
+#include "launch.h"
 #include "browser.h"
 #include "ui.h"
 #include "osk.h"
@@ -42,6 +43,7 @@ static void apply_one(const SetDef *d) {
 }
 
 void settings_ui_open(void) {
+    category = CAT_BROWSING;
     capture = -1;
     confirm_action = -1;
     dirty = false;
@@ -80,6 +82,8 @@ static void run_action(int idx) {
     case SA_CLEAR_BOOKMARKS: browser_clear_bookmarks(); ui_toast("Bookmarks deleted"); break;
     case SA_RESET_ALL:
         settings_defaults(&g_set);
+        launch_capture(&g_set);
+        launch_apply(&g_set);
         settings_apply_all();
         dirty = true;
         ui_toast("All settings reset");
@@ -116,14 +120,9 @@ static void step_value(const SetDef *d, int dir) {
 
 static void draw_toggle(UiId id, float x, float y, bool on) {
     const Theme *t = theme();
-    float k = ui_anim(id, on ? 1.0f : 0.0f, 0.3f);
-    float w = 56, h = 28;
-    gfx_rrect(x, y, w, h, 14, color_lerp(color_alpha(t->button_bottom, 0.7f), t->accent, k));
-    gfx_rrect_outline(x, y, w, h, 14, 1.5f, t->panel_edge);
-    float kx = x + 14 + k * (w - 28);
-    gfx_circle(kx + 1, y + 16, 11, color_alpha(t->shadow, 0.6f));
-    gfx_circle(kx, y + 14, 11, t->button_top);
-    gfx_circle(kx, y + 11, 6, rgba(255, 255, 255, 80));
+    (void)id;
+    gfx_cut_rect(x, y, 56, 28, 3, on ? color_lerp(t->button_top, t->accent, .3f) : t->button_top);
+    gfx_text_centered(FONT_CHROME, 16, x+28, y+6, on ? t->accent : t->text_dim, on ? "On" : "Off");
 }
 
 static void draw_info_line(float x, float y, float w) {
@@ -133,8 +132,8 @@ static void draw_info_line(float x, float y, float w) {
              g_set.widescreen ? "16:9" : "4:3", netio_state() == NET_UP ? netio_ip() : "offline",
              storage_ok() ? storage_device_name() : "none", tls_ca_count());
     float ts = 14;
-    float iw = gfx_text_width(FONT_UI, ts, info, -1);
-    gfx_text(FONT_UI, ts, x + w - iw, y, t->text_dim, info, -1);
+    int n = gfx_text_fit(FONT_CHROME, ts, info, -1, w);
+    gfx_text(FONT_CHROME, ts, x, y, t->text_dim, info, n);
 }
 
 bool settings_ui_frame(bool interactive) {
@@ -152,8 +151,8 @@ bool settings_ui_frame(bool interactive) {
     ui_panel(sx + 4, sy + 4, sw - 8, hh, 24);
     if (ui_icon_button(ui_id("set-back", 0), sx + 30, sy + 4 + hh * 0.5f, 18, ICON_BACK, true)) leave = true;
     ui_draw_icon(ICON_GEAR, sx + 72, sy + 4 + hh * 0.5f, 26, t->text);
-    gfx_text(FONT_UI, 24, sx + 92, sy + 16, t->text, "Settings", -1);
-    draw_info_line(sx + 210, sy + 24, sw - 230);
+    gfx_text(FONT_CHROME, 21, sx + 92, sy + 12, t->text, "Browser settings", -1);
+    draw_info_line(sx + 92, sy + 37, sw - 110);
 
     /* categories */
     float top = sy + hh + 16;
@@ -177,11 +176,11 @@ bool settings_ui_frame(bool interactive) {
     float help_h = 44;
     float rows_y = oy + 10, rows_h = oh - help_h - 14;
     float row_h = 46;
-    const char *help = NULL;
+    const char *help = g_launch.active ? "Display, motion, sound and rumble follow Indigo." : NULL;
 
     int idxs[64], n = 0;
     for (int i = 0; i < g_setdef_count && n < 64; i++)
-        if (g_setdefs[i].cat == category) idxs[n++] = i;
+        if (g_setdefs[i].cat == category && !launch_inherits(&g_setdefs[i])) idxs[n++] = i;
     float content_h = n * row_h;
     if (input_ok) {
         scroll_target += input_scroll_delta() * 0.5f;
@@ -193,7 +192,7 @@ bool settings_ui_frame(bool interactive) {
     if (max_s < 0) max_s = 0;
     if (scroll_target > max_s) scroll_target = max_s;
     if (scroll_target < 0) scroll_target = 0;
-    scroll += (scroll_target - scroll) * (g_set.animations ? 0.3f : 1.0f);
+    scroll += (scroll_target - scroll) * (g_set.animations ? fminf(1, 0.3f * input_delta_seconds() * 60) : 1.0f);
 
     gfx_set_clip(ox, rows_y, ow, rows_h);
     float ctrl_w = fminf(250, ow * 0.45f);
@@ -208,11 +207,11 @@ bool settings_ui_frame(bool interactive) {
         if (r % 2 == 0) gfx_rrect(ox + 8, y + 2, ow - 16, row_h - 4, 10, rgba(255, 255, 255, 18));
         char value[300];
         settings_format_value(d, value, sizeof(value));
-        float ly = y + (row_h - gfx_line_height(FONT_UI, 17)) * 0.5f;
+        float ly = y + (row_h - gfx_line_height(FONT_CHROME, 17)) * 0.5f;
         UiId rid = ui_id("row", i);
         switch (d->type) {
         case ST_BOOL:
-            gfx_text(FONT_UI, 17, ox + 20, ly, t->text, d->label, -1);
+            gfx_text(FONT_CHROME, 17, ox + 20, ly, t->text, d->label, -1);
             if (ui_click(rid, ox + 8, y + 2, ow - 16, row_h - 4)) {
                 *setdef_int(d) = !*setdef_int(d);
                 sound_play(SFX_SELECT);
@@ -222,11 +221,11 @@ bool settings_ui_frame(bool interactive) {
             break;
         case ST_INT:
         case ST_CHOICE: {
-            gfx_text(FONT_UI, 17, ox + 20, ly, t->text, d->label, -1);
+            gfx_text(FONT_CHROME, 17, ox + 20, ly, t->text, d->label, -1);
             float cy = y + row_h * 0.5f;
             if (ui_icon_button(ui_id("dec", i), ctrl_x + 14, cy, 13, ICON_LEFT, true)) step_value(d, -1);
             if (ui_icon_button(ui_id("inc", i), ctrl_x + ctrl_w - 14, cy, 13, ICON_RIGHT, true)) step_value(d, +1);
-            gfx_text_centered(FONT_UI, 17, ctrl_x + ctrl_w * 0.5f, ly - 3, t->text, value);
+            gfx_text_centered(FONT_CHROME, 17, ctrl_x + ctrl_w * 0.5f, ly - 3, t->text, value);
             if (d->type == ST_INT) {
                 float frac = (float)(*setdef_int(d) - d->min) / (float)(d->max - d->min);
                 float bx = ctrl_x + 36, bw = ctrl_w - 72;
@@ -237,12 +236,12 @@ bool settings_ui_frame(bool interactive) {
             break;
         }
         case ST_STR: {
-            gfx_text(FONT_UI, 17, ox + 20, ly, t->text, d->label, -1);
+            gfx_text(FONT_CHROME, 17, ox + 20, ly, t->text, d->label, -1);
             bool hov = ui_hover(rid, ox + 8, y + 2, ow - 16, row_h - 4);
             gfx_rrect(ctrl_x, y + 8, ctrl_w, row_h - 16, 9, t->field_bg);
             gfx_rrect_outline(ctrl_x, y + 8, ctrl_w, row_h - 16, 9, hov ? 2.0f : 1.0f, hov ? t->accent : t->panel_edge);
-            int vn = gfx_text_fit(FONT_BODY, 16, value, -1, ctrl_w - 20);
-            gfx_text(FONT_BODY, 16, ctrl_x + 10, y + 13, t->field_text, value, vn);
+            int vn = gfx_text_fit(FONT_CHROME, 16, value, -1, ctrl_w - 20);
+            gfx_text(FONT_CHROME, 16, ctrl_x + 10, y + 13, t->field_text, value, vn);
             if (hov && input_ok && visible && input_pressed(ACT_CLICK)) {
                 input_consume(ACT_CLICK);
                 sound_play(SFX_SELECT);
@@ -253,7 +252,7 @@ bool settings_ui_frame(bool interactive) {
             break;
         }
         case ST_BIND: {
-            gfx_text(FONT_UI, 17, ox + 20, ly, t->text, d->label, -1);
+            gfx_text(FONT_CHROME, 17, ox + 20, ly, t->text, d->label, -1);
             bool waiting = (capture == i);
             const char *lbl = waiting ? "Press a button..." : value;
             if (ui_button(rid, ctrl_x, y + 6, ctrl_w, row_h - 12, lbl, 17, waiting ? UIB_ACCENT : UIB_NORMAL)) {
@@ -288,7 +287,7 @@ bool settings_ui_frame(bool interactive) {
     /* help line */
     float hy = oy + oh - help_h;
     gfx_rect(ox + 14, hy - 2, ow - 28, 1.5f, color_alpha(t->panel_edge, 0.6f));
-    if (help) gfx_text(FONT_UI, 15, ox + 20, hy + 10, t->text_dim, help, gfx_text_fit(FONT_UI, 15, help, -1, ow - 40));
+    if (help) gfx_text(FONT_CHROME, 15, ox + 20, hy + 10, t->text_dim, help, gfx_text_fit(FONT_CHROME, 15, help, -1, ow - 40));
 
     /* button capture for remapping */
     if (capture >= 0 && interactive && !modal) {

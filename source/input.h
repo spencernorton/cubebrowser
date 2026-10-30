@@ -18,6 +18,7 @@ extern const u32 button_masks[BTN_COUNT];
 enum { DIR_NONE = -1, DIR_UP, DIR_DOWN, DIR_LEFT, DIR_RIGHT };
 
 void  input_init(void);
+float input_delta_seconds(void);   /* steady elapsed time, bounded after stalls */
 void  input_update(void);          /* call once per frame */
 bool  input_pressed(Action a);
 bool  input_held(Action a);

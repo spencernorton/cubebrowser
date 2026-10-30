@@ -66,6 +66,10 @@ jobs:
           docker run --rm --network cube-runtime --ip 192.0.2.3 --cpus 2 --memory 3g \
             -v "$PWD:/work" cube-runtime \
             python3 tests/runtime/run.py --dol cubebrowser.dol --card-files sd/gcbrowser --out runtime-evidence
+          docker run --rm --network cube-runtime --ip 192.0.2.3 --cpus 2 --memory 3g \
+            -v "$PWD:/work" cube-runtime \
+            python3 tests/runtime/run.py --dol cubebrowser.dol --card-files sd/gcbrowser \
+              --out runtime-evidence/wide-pal-port4 --wide --pal --pad-port 4
 
       - name: Runtime evidence
         if: always()

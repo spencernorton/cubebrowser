@@ -1,5 +1,5 @@
 /* CubeBrowser - a small HTTPS web browser for the Nintendo GameCube.
- * main.c - start-up and the 60 fps main loop with cube-turn screen transitions. */
+ * main.c - startup and the active screen loop. */
 #include <gccore.h>
 #include <math.h>
 #include <stdio.h>
@@ -17,6 +17,7 @@
 #include "browser.h"
 #include "diag.h"
 #include "lab.h"
+#include "launch.h"
 
 enum { SCREEN_BROWSER, SCREEN_SETTINGS };
 
@@ -41,33 +42,20 @@ static void draw_screen(int which, bool interactive) {
     }
 }
 
-/* Draws two screens as adjacent faces of a turning cube. */
+/* A brief fade keeps transitions cheap; input belongs to neither screen. */
 static void draw_transition(int from, int to, float p) {
-    float e = p * p * (3 - 2 * p);   /* smoothstep */
-    float th = e * (float)M_PI * 0.5f;
-    float c = cosf(th), s = sinf(th);
-    float k = 1.0f / (c + s);
-    float W = gfx_width();
-    float ty = 240.0f * (1.0f - k);
-    bool forward = (to == SCREEN_SETTINGS);
-    float out_sx = k * c, in_sx = k * s;
-    float out_tx = forward ? 0 : W * k * s;
-    float in_tx = forward ? W * k * c : 0;
-    const Theme *t = theme();
-
-    gfx_set_transform(out_sx, k, out_tx, ty);
-    draw_screen(from, false);
-    gfx_rect(0, 0, W, 480, color_alpha(t->shadow, s * 0.6f));
-    gfx_set_transform(in_sx, k, in_tx, ty);
+    (void)from;
     draw_screen(to, false);
-    gfx_rect(0, 0, W, 480, color_alpha(t->shadow, c * 0.6f));
-    gfx_reset_transform();
+    gfx_rect(0, 0, gfx_width(), 480, color_alpha(theme()->bg_top, 1-p));
 }
 
 int main(int argc, char **argv) {
+    launch_parse(argc, argv);
     bool sd = lab_init(argc, argv) && storage_init();   /* the console lab: off unless started with lab=1 */
     diag_init();
     settings_load();
+    launch_capture(&g_set);
+    launch_apply(&g_set);
     gfx_init(g_set.video_mode, g_set.widescreen != 0);
     input_init();
 
@@ -76,12 +64,18 @@ int main(int argc, char **argv) {
     for (int i = 0; i < 6; i++) {
         VIDEO_WaitVSync();
         PAD_ScanPads();
-        u32 h = PAD_ButtonsHeld(0);
-        if ((h & PAD_TRIGGER_L) && (h & PAD_TRIGGER_R) && (h & PAD_BUTTON_START)) reset = true;
+        for (int p = 0; p < 4; p++) {
+            u32 h = PAD_ButtonsHeld(p);
+            if ((h & PAD_TRIGGER_L) && (h & PAD_TRIGGER_R) && (h & PAD_BUTTON_START)) reset = true;
+        }
     }
     if (reset) {
         settings_defaults(&g_set);
+        launch_capture(&g_set);
+        launch_apply(&g_set);
         settings_save();
+        gfx_set_widescreen(g_set.widescreen != 0);
+        gfx_apply_video_mode(g_set.video_mode);
     }
     theme_set(g_set.theme);
     entropy_init();
@@ -106,7 +100,7 @@ int main(int argc, char **argv) {
         diag_note(DIAG_MAIN, "screen %d", screen);
         if (trans < 1.0f) {
             draw_transition(screen, target_screen, trans);
-            trans += 1.0f / 22.0f;
+            trans += input_delta_seconds() / 0.367f;
             if (trans >= 1.0f) { trans = 1.0f; screen = target_screen; }
         } else {
             draw_screen(screen, true);

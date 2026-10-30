@@ -90,19 +90,19 @@ static void draw_field(float x, float y, float w, float h, float ts) {
     char shown[TEXT_MAX];
     for (int i = 0; i <= len; i++) shown[i] = (mode == OSK_PASSWORD && i < len) ? '*' : text[i];
     if (caret < view_start) view_start = caret;
-    while (view_start < caret && gfx_text_width(FONT_BODY, ts, shown + view_start, caret - view_start) > fw - 4)
+    while (view_start < caret && gfx_text_width(FONT_CHROME, ts, shown + view_start, caret - view_start) > fw - 4)
         view_start++;
-    int vis = gfx_text_fit(FONT_BODY, ts, shown + view_start, len - view_start, fw);
-    float ty = y + (h - gfx_line_height(FONT_BODY, ts)) * 0.5f;
+    int vis = gfx_text_fit(FONT_CHROME, ts, shown + view_start, len - view_start, fw);
+    float ty = y + (h - gfx_line_height(FONT_CHROME, ts)) * 0.5f;
     gfx_set_clip(x + 4, y, w - 8, h);
-    gfx_text(FONT_BODY, ts, x + pad, ty, t->field_text, shown + view_start, vis);
-    float cx = x + pad + gfx_text_width(FONT_BODY, ts, shown + view_start, caret - view_start);
-    if ((ui_frame() / 20) % 2 == 0) gfx_rect(cx, ty + 2, 2, gfx_line_height(FONT_BODY, ts) - 4, t->accent);
+    gfx_text(FONT_CHROME, ts, x + pad, ty, t->field_text, shown + view_start, vis);
+    float cx = x + pad + gfx_text_width(FONT_CHROME, ts, shown + view_start, caret - view_start);
+    if ((ui_frame() / 20) % 2 == 0) gfx_rect(cx, ty + 2, 2, gfx_line_height(FONT_CHROME, ts) - 4, t->accent);
     gfx_clear_clip();
     /* click inside the field to move the caret */
     if (ui_click(ui_id("osk-field", 0), x, y, w, h)) {
         float rel = input_cursor_x() - (x + pad);
-        caret = view_start + gfx_text_fit(FONT_BODY, ts, shown + view_start, len - view_start, rel);
+        caret = view_start + gfx_text_fit(FONT_CHROME, ts, shown + view_start, len - view_start, rel);
     }
 }
 
@@ -124,10 +124,10 @@ void osk_frame(void) {
     float px = sx + (sw - pw) * 0.5f;
     float py = sy + sh - ph + (1.0f - open) * (ph + 40);
     ui_panel(px, py, pw, ph, 18);
-    gfx_text(FONT_UI, 20, px + 20, py + 12, t->text, title, -1);
+    gfx_text(FONT_CHROME, 20, px + 20, py + 12, t->text, title, -1);
     const char *hint = "B: Delete  Y: Space  X: Shift  L/R: Move  START: OK";
     float hs = 13;
-    gfx_text(FONT_UI, hs, px + pw - 20 - gfx_text_width(FONT_UI, hs, hint, -1), py + 18, t->text_dim, hint, -1);
+    gfx_text(FONT_CHROME, hs, px + pw - 20 - gfx_text_width(FONT_CHROME, hs, hint, -1), py + 30, t->text_dim, hint, -1);
 
     draw_field(px + 16, py + 44, pw - 32, 46, 22);
 

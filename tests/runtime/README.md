@@ -2,10 +2,10 @@
 
 The required `build` check boots its own `cubebrowser.dol` in Dolphin. A fresh
 FAT32 SD card holds the packaged certificates and fixture settings. The actual
-PowerPC program mounts the card, initializes the Broadband Adapter, fetches HTML
+PowerPC program mounts the card, initializes the Broadband Adapter, fetches gzip HTML
 and PNG from a local server, decodes the image and renders it. The test requires
 both requests and a large patch of the image's pixels. Controller input must
-open and close Bookmarks and Settings, follow a link to a differently colored
+open and close Bookmarks, Menu, Settings and the address keyboard, follow a link to a differently colored
 page and return with Back. Screens, request paths, the DOL checksum and Dolphin
 logs are retained on failure as well as success.
 
@@ -32,3 +32,9 @@ on address `192.0.2.3` with this checkout mounted at `/work`:
 ```sh
 python3 tests/runtime/run.py --dol cubebrowser.dol --card-files sd/gcbrowser --out runtime-evidence
 ```
+
+CI runs both the normal NTSC 4:3 route and `--wide --pal --pad-port 4`.
+The latter boots PAL interlaced video with an anamorphic layout and the pad
+in the fourth port. The optional `--cpu-core 5` explicitly selects Dolphin's
+cached interpreter for ARM hosts whose default JIT exits even on the unchanged
+baseline. CI uses the default core; this option does not mask a failed route.
