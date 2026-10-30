@@ -1,3 +1,36 @@
+## 2026-10-29 — Keep launcher clock and packaged bytes consistent
+
+Use the TLS/network UTC clock for preference expiry. Indigo's RTC is local;
+normalize a known inherited offset, and keep an unknown integrated display on
+the console clock. Time controls remain inherited without overwriting saved
+standalone values. Clock context host checks and the target build pass.
+
+Normalize source filename prefixes so a browser built under Indigo's package
+checkout has the exact DOL bytes tested by the browser producer. Two fresh
+local builds at /src and /work/browser-src match byte-for-byte. Required CI
+repeats this comparison before its runtime routes. No dependency, CA, loader,
+lab opt-in or physical qualification rule changes.
+
+## 2026-10-29 — Remember the start-page weather ZIP
+
+Support only the start page's host-only five-digit indigo_zip preference on
+verified HTTPS norvitech.com/indigo/start/ responses. Require Secure, HttpOnly,
+SameSite=Lax, the exact path and a bounded Max-Age. Persist a small versioned
+record on the selected card; retain visit-only state with an honest toast if
+saving fails. Clearing expires and empties the record. Send it on safe GET
+navigations and first-party start-page resources, never other pages' resources,
+paths/origins, unverified TLS, explicit downloads or POSTs. Fetch start-page images
+directly so the image helper does not receive the ZIP.
+
+Nine sanitizer host suites pass. The target builds, and the local pinned
+Dolphin cached interpreter proves three real DOL boots: save, first-request
+persistence after restart, controller clear and another restart with no value.
+Wire headers and actual FAT bytes are checked, including outside-path rejection
+and first-party image support. Add this route to required CI. Its expiring CA
+is copied only into its private card image, never the packaged CA bundle.
+The live site form and physical-card qualification are separate integration
+checks; do not substitute unit mocks for those results.
+
 ## 2026-10-29 — Native Indigo chrome and launch preferences
 
 Replace glossy widgets and drifting cubes with dark cut-corner panels,

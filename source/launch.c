@@ -65,7 +65,7 @@ bool launch_inherits(const SetDef *d) {
         (d->off == offsetof(Settings, animations) && g_launch.motion != INT_MIN) ||
         (d->off == offsetof(Settings, sounds) && g_launch.sounds != INT_MIN) ||
         (d->off == offsetof(Settings, rumble) && g_launch.rumble != INT_MIN) ||
-        ((d->off == offsetof(Settings, tz_minutes) || d->off == offsetof(Settings, dst)) && g_launch.timezone != INT_MIN) ||
+        (d->off == offsetof(Settings, tz_minutes) || d->off == offsetof(Settings, dst)) ||
         (d->off == offsetof(Settings, theme) && g_launch.color >= 0);
 }
 void launch_preserve(Settings *settings) {
@@ -74,4 +74,9 @@ void launch_preserve(Settings *settings) {
         const SetDef *d = &g_setdefs[i];
         if (d->key && launch_inherits(d)) *(int *)((char *)settings + d->off) = *(const int *)((const char *)&saved + d->off);
     }
+}
+
+int64_t launch_console_utc(int64_t console_seconds) {
+    return g_launch.active && g_launch.timezone != INT_MIN ?
+        console_seconds - (int64_t)g_launch.timezone * 60 : console_seconds;
 }

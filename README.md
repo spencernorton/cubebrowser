@@ -303,7 +303,11 @@ Older and hobbyist sites from the 1990s and 2000s usually display very well.
   use it for banking or other high-value accounts.
 - With the image helper on, images.weserv.nl sees the addresses of pictures
   you view.
-- The browser keeps no cookies, so you won't stay logged in to sites.
+- The browser keeps no login or general browsing cookies. The Indigo start
+  page can remember a five-digit weather ZIP on this card for up to a year;
+  its Clear action removes it. This preference is sent only to the verified
+  HTTPS start-page origin and its first-party resources. A card save failure
+  is shown as a visit-only preference.
 
 ---
 
@@ -368,7 +372,8 @@ The named, versioned DOL launch contract is documented in
 
 The required build runs the saved HTML/CSS parser regressions with address
 and undefined-behavior sanitizers, then boots and uses the actual DOL in the
-emulator. To run the parser cases locally with Clang:
+emulator. It also rebuilds the browser at the package checkout path and requires
+identical DOL bytes. To run the parser cases locally with Clang:
 
 ```sh
 sh tools/fuzz/run.sh --regressions

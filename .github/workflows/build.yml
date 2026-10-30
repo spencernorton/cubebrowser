@@ -59,6 +59,15 @@ jobs:
       - name: Build the .dol
         run: docker run --rm -v "$PWD:/src" -w /src ghcr.io/extremscorner/libogc2@sha256:f9ffb7e33c4ba4010da8e40c01366f7c24732130146abd99690403bd42d3e4c2 make
 
+      - name: Prove the bundled browser has the tested bytes
+        run: |
+          mkdir -p "$RUNNER_TEMP/browser-bundle"
+          git archive HEAD | tar -x -C "$RUNNER_TEMP/browser-bundle"
+          cp -R third_party "$RUNNER_TEMP/browser-bundle/"
+          docker run --rm -v "$RUNNER_TEMP/browser-bundle:/work/browser-src" -w /work/browser-src \
+            ghcr.io/extremscorner/libogc2@sha256:f9ffb7e33c4ba4010da8e40c01366f7c24732130146abd99690403bd42d3e4c2 make
+          cmp cubebrowser.dol "$RUNNER_TEMP/browser-bundle/cubebrowser.dol"
+
       - name: Boot and use this candidate
         run: |
           docker network create --internal --subnet 192.0.2.0/24 cube-runtime
@@ -70,6 +79,19 @@ jobs:
             -v "$PWD:/work" cube-runtime \
             python3 tests/runtime/run.py --dol cubebrowser.dol --card-files sd/gcbrowser \
               --out runtime-evidence/wide-pal-port4 --wide --pal --pad-port 4
+
+      - name: Prove ZIP persistence across browser restarts
+        run: |
+          mkdir -p "$RUNNER_TEMP/zip-cert"
+          openssl req -x509 -newkey rsa:2048 -nodes -sha256 -days 2 \
+            -config tests/runtime/zip-cert.cnf -keyout "$RUNNER_TEMP/zip-cert/key.pem" \
+            -out "$RUNNER_TEMP/zip-cert/cert.pem"
+          docker network create --internal --subnet 192.0.2.0/24 cube-zip
+          trap 'docker network rm cube-zip' EXIT
+          docker run --rm --network cube-zip --ip 192.0.2.3 --cpus 2 --memory 3g \
+            -v "$PWD:/work" -v "$RUNNER_TEMP/zip-cert:/cert:ro" cube-runtime \
+            python3 tests/runtime/run_zip.py --dol cubebrowser.dol --card-files sd/gcbrowser \
+              --cert-dir /cert --out runtime-evidence/zip-restarts
 
       - name: Runtime evidence
         if: always()

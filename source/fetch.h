@@ -21,7 +21,7 @@ typedef struct {
 void        fetch_init(void);
 bool        fetch_start(const char *url, const char *post_body);
 bool        fetch_start_save(const char *url);   /* ask to save whatever the link is */
-bool        fetch_start_image(const char *url, int max_w, int max_h, int tag);
+bool        fetch_start_image(const char *url, int max_w, int max_h, int tag, bool first_party);
 void        fetch_cancel(void);
 FetchState  fetch_state(void);
 JobKind     fetch_job_kind(void);
@@ -29,7 +29,7 @@ const char *fetch_stage(void);
 int         fetch_progress(void);
 bool        fetch_take(HttpResult *out);          /* page result; back to IDLE */
 bool        fetch_take_image(ImageResult *out);   /* image result; back to IDLE */
-bool        fetch_start_css(const char *url, int tag);
+bool        fetch_start_css(const char *url, int tag, bool first_party);
 bool        fetch_take_css(HttpResult *out, int *tag);
 void        fetch_discard(void);                  /* drop whatever finished */
 bool        fetch_net_ready(void);
