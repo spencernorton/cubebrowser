@@ -1,3 +1,9 @@
+## 2026-10-30 — Show native browser controls and clarify build downloads
+
+The README explains the product with a real interaction recording or a source-grounded
+architecture diagram. Recordings retain their source attribution and offer still
+images for reduced-motion viewing. No runtime behaviour is changed.
+
 ## 2026-10-29 — Make packaged object order independent of locale
 
 The exact Indigo CI package exposed a second reproducibility input: glob()
