@@ -5,6 +5,81 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>
+
+bool url_is_local(const char *url) {
+    Url u;
+    if (!url || !url_parse(url, &u) || !u.host[0]) return false;
+    size_t n = strlen(u.host);
+    if (!strcasecmp(u.host, "localhost") ||
+        (n > 6 && !strcasecmp(u.host + n - 6, ".local")) ||
+        (n > 10 && !strcasecmp(u.host + n - 10, ".localhost"))) return true;
+    unsigned octets[4] = {0}, part = 0;
+    const char *p = u.host;
+    for (; part < 4; part++) {
+        if (!isdigit((unsigned char)*p)) break;
+        while (isdigit((unsigned char)*p)) {
+            octets[part] = octets[part] * 10 + (unsigned)(*p++ - '0');
+            if (octets[part] > 255) return false;
+        }
+        if (part == 3 && !*p) {
+            unsigned a = octets[0], b = octets[1];
+            return a == 10 || a == 127 || (a == 192 && b == 168) ||
+                   (a == 172 && b >= 16 && b <= 31) || (a == 169 && b == 254);
+        }
+        if (*p++ != '.') break;
+    }
+    return strchr(u.host, '.') == NULL;   /* an unqualified LAN host name */
+}
+
+static int hex_digit(unsigned char c) {
+    if (c >= '0' && c <= '9') return c - '0';
+    c = (unsigned char)tolower(c);
+    return c >= 'a' && c <= 'f' ? c - 'a' + 10 : -1;
+}
+
+static bool redirect_parameter(const char *query, const char *name, char *out, size_t capacity) {
+    size_t key = strlen(name);
+    for (const char *p = query; *p;) {
+        if (*p == '?' || *p == '&') p++;
+        const char *end = p + strcspn(p, "&#");
+        if ((size_t)(end - p) > key && !memcmp(p, name, key) && p[key] == '=') {
+            size_t used = 0;
+            for (p += key + 1; p < end; p++) {
+                unsigned char c = (unsigned char)*p;
+                if (c == '%' && end - p >= 3) {
+                    int a = hex_digit((unsigned char)p[1]), b = hex_digit((unsigned char)p[2]);
+                    if (a < 0 || b < 0) return false;
+                    c = (unsigned char)(a * 16 + b);
+                    p += 2;
+                } else if (c == '%') return false;
+                if (!c || c < 32 || c == 127 || used + 1 >= capacity) return false;
+                out[used++] = (char)c;
+            }
+            if (!used) return false;
+            out[used] = 0;
+            return true;
+        }
+        if (*end != '&') break;
+        p = end;
+    }
+    return false;
+}
+
+bool url_unwrap_redirect(const char *url, char *out, size_t capacity) {
+    Url parsed;
+    if (!url_parse(url, &parsed)) return false;
+    const char *query = strchr(parsed.path, '?');
+    if (!query) return false;
+    bool found = false;
+    if ((!strcasecmp(parsed.host, "duckduckgo.com") || !strcasecmp(parsed.host, "html.duckduckgo.com") ||
+         !strcasecmp(parsed.host, "lite.duckduckgo.com")) && !strncmp(parsed.path, "/l/", 3))
+        found = redirect_parameter(query, "uddg", out, capacity);
+    else if (!strcasecmp(parsed.host, "www.google.com") && !strncmp(parsed.path, "/url?", 5))
+        found = redirect_parameter(query, "q", out, capacity) || redirect_parameter(query, "url", out, capacity);
+    Url target;
+    return found && url_parse(out, &target) && (!strcmp(target.scheme, "http") || !strcmp(target.scheme, "https"));
+}
 
 /* Percent-encodes bytes that can't appear raw in a request line: spaces,
  * control characters, quotes and other unsafe ASCII, and every non-ASCII

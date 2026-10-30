@@ -3,6 +3,7 @@
 #include "netio.h"
 #include "settings.h"
 #include "gc_entropy.h"
+#include "dns_cache.h"
 #include <network.h>
 #include <ogc/lwp_watchdog.h>
 #include <string.h>
@@ -14,6 +15,8 @@ static char status[96] = "Network not started";
 static char local_ip[16], netmask[16], gateway[16];
 static bool time_synced;
 static s64 time_base;   /* unix seconds at timebase zero */
+static DnsCache dns_cache;
+static char cache_dns[16];
 
 NetState netio_state(void) { return state; }
 const char *netio_status(void) { return status; }
@@ -42,6 +45,8 @@ static bool parse_ipv4(const char *s, u32 *out_be) {
 }
 
 bool netio_bringup(void) {
+    memset(&dns_cache, 0, sizeof(dns_cache));
+    snprintf(cache_dns, sizeof(cache_dns), "%s", g_set.dns);
     state = NET_STARTING;
     snprintf(status, sizeof(status), g_set.dhcp ? "Asking router for an address..." : "Configuring network...");
     if (g_set.dhcp) {
@@ -102,7 +107,7 @@ static int udp_exchange(u32 server_be, u16 port, const void *req, int req_len, v
 }
 
 /* Minimal DNS A-record lookup. */
-static int dns_query(u32 server_be, const char *host, u32 *ip_be) {
+static int dns_query(u32 server_be, const char *host, u32 *ip_be, u32 *ttl_seconds) {
     unsigned char q[300], r[512];
     static u16 qid = 0x4321;
     qid += (u16)gettime();
@@ -137,15 +142,19 @@ static int dns_query(u32 server_be, const char *host, u32 *ip_be) {
         }
         i += 5;
     }
+    u32 shortest_ttl = 300;
     for (int k = 0; k < an && i < got; k++) {
         if ((r[i] & 0xC0) == 0xC0) i += 2;
         else { while (i < got && r[i]) i += r[i] + 1; i++; }
         if (i + 10 > got) break;
         int type = (r[i] << 8) | r[i + 1];
+        u32 ttl = (u32)r[i + 4] << 24 | (u32)r[i + 5] << 16 | (u32)r[i + 6] << 8 | r[i + 7];
+        if ((type == 1 || type == 5) && ttl < shortest_ttl) shortest_ttl = ttl;
         int rdlen = (r[i + 8] << 8) | r[i + 9];
         i += 10;
         if (type == 1 && rdlen == 4 && i + 4 <= got) {
             *ip_be = ((u32)r[i] << 24) | ((u32)r[i + 1] << 16) | ((u32)r[i + 2] << 8) | r[i + 3];
+            *ttl_seconds = shortest_ttl;
             return 0;
         }
         i += rdlen;
@@ -155,6 +164,12 @@ static int dns_query(u32 server_be, const char *host, u32 *ip_be) {
 
 int netio_resolve(const char *host, u32 *ip_be) {
     if (parse_ipv4(host, ip_be)) return 0;
+    if (strcmp(cache_dns, g_set.dns)) {
+        memset(&dns_cache, 0, sizeof(dns_cache));
+        snprintf(cache_dns, sizeof(cache_dns), "%s", g_set.dns);
+    }
+    u64 now = ticks_to_millisecs(SYS_GetSystemTime());
+    if (dns_cache_get(&dns_cache, host, now, ip_be)) return 0;
     /* The GameCube network library has no built-in name lookup, so we ask a
      * DNS server ourselves: the DNS setting if filled in, then the router
      * (most home routers answer DNS), then public servers as a backup. */
@@ -167,8 +182,9 @@ int netio_resolve(const char *host, u32 *ip_be) {
     for (int i = 0; i < n; i++) {
         u32 server;
         if (!parse_ipv4(servers[i], &server)) continue;
-        int r = dns_query(server, host, ip_be);
-        if (r == 0) return 0;
+        u32 ttl = 0;
+        int r = dns_query(server, host, ip_be, &ttl);
+        if (r == 0) { dns_cache_put(&dns_cache, host, *ip_be, ttl, now); return 0; }
         if (r == -2) return -1;   /* the server says this name doesn't exist */
     }
     return -1;

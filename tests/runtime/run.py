@@ -2,6 +2,7 @@
 """Boot the shipped DOL, fetch a local page through Dolphin's BBA, drive a pad."""
 from __future__ import annotations
 import argparse
+import gzip
 import hashlib
 import http.server
 import io
@@ -24,12 +25,15 @@ def main():
     p.add_argument("--dol", type=Path, required=True)
     p.add_argument("--card-files", type=Path, required=True)
     p.add_argument("--out", type=Path, required=True)
+    p.add_argument("--cpu-core", type=int, choices=(0, 1, 3, 5), default=None,
+                   help="Explicit Dolphin core override, e.g. 5 for the cached interpreter on ARM hosts")
     args = p.parse_args()
     out = args.out.resolve()
     out.mkdir(parents=True, exist_ok=True)
     (out / "result.json").unlink(missing_ok=True)
     requests = []
     pictures = {}
+    encodings = []
     for name, color in [("/marker.png", (229, 37, 181)), ("/marker2.png", (21, 188, 113))]:
         buffer = io.BytesIO()
         Image.new("RGB", (240, 120), color).save(buffer, format="PNG")
@@ -49,9 +53,18 @@ def main():
             else:
                 self.send_error(404)
                 return
+            encoding = "gzip" if self.path in ("/first", "/second") else None
+            if encoding:
+                if "gzip" not in self.headers.get("Accept-Encoding", ""):
+                    self.send_error(400, "Candidate must advertise gzip support")
+                    return
+                data = gzip.compress(data, mtime=0)
+                encodings.append(self.path)
             self.send_response(200)
             self.send_header("Content-Type", kind)
             self.send_header("Content-Length", str(len(data)))
+            if encoding:
+                self.send_header("Content-Encoding", encoding)
             self.end_headers()
             self.wfile.write(data)
         def log_message(self, *_):
@@ -75,6 +88,7 @@ def main():
             config = user / "Config"
             config.mkdir(parents=True)
             (config / "Dolphin.ini").write_text(f"""[Core]
+{f"CPUCore = {args.cpu_core}" if args.cpu_core is not None else ""}
 DSPHLE = False
 DSPThread = False
 MMU = True
@@ -120,7 +134,7 @@ RenderToMain = True
             processes.append(dol)
             def frame(name):
                 if dol.poll() is not None:
-                    raise RuntimeError("Dolphin exited before acceptance completed")
+                    raise RuntimeError(f"Dolphin exited before acceptance completed (exit {dol.returncode})")
                 raw = sp.run(["ffmpeg", "-loglevel", "error", "-f", "x11grab", "-video_size", "640x480", "-draw_mouse", "0",
                               "-i", display + "+0,0", "-frames:v", "1", "-f", "rawvideo", "-pix_fmt", "rgb24", "-"],
                              capture_output=True, check=True, timeout=20).stdout
@@ -173,10 +187,12 @@ RenderToMain = True
             if int(magenta.sum()) < 10000 or changed(first, rgb) > 6000:
                 raise RuntimeError("Back did not restore the first page")
             log = (out / "dolphin.log").read_text(errors="replace")
+            if not {"/first", "/second"}.issubset(encodings):
+                raise RuntimeError("Candidate did not request both gzip pages")
             if re.search(r"Invalid (?:read|write)|DSI exception|ISI exception|Unhandled exception", log, re.I):
                 raise RuntimeError("Dolphin reported an invalid access or CPU exception")
             (out / "result.json").write_text(json.dumps({"dol_sha256": hashlib.file_digest(args.dol.open("rb"), "sha256").hexdigest(),
-                                                         "requests": requests, "passed": True}, indent=2) + "\n")
+                                                         "requests": requests, "gzip_pages": encodings, "passed": True}, indent=2) + "\n")
             print("PASS: candidate booted, rendered HTML/PNG, opened and closed menus, followed a link and went back", flush=True)
     finally:
         for proc in reversed(processes):

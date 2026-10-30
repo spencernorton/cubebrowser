@@ -2,6 +2,10 @@
 #pragma once
 #include <stdbool.h>
 #include <stddef.h>
+/* Literal loopback/private/link-local addresses and local host names. */
+bool url_is_local(const char *url);
+/* Recognized search-result wrapper -> validated HTTP(S) destination. */
+bool url_unwrap_redirect(const char *url, char *out, size_t capacity);
 
 #define URL_MAX 2048
 

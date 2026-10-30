@@ -50,6 +50,9 @@ jobs:
       - name: Check saved HTML and CSS regressions
         run: sh tools/fuzz/run.sh --regressions
 
+      - name: Check browser engine behavior
+        run: sh tools/tests/run.sh
+
       - name: Download mbedTLS
         run: sh get-mbedtls.sh
 

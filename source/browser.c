@@ -1,6 +1,7 @@
 /* browser.c - toolbar, page view, status bar, history and bookmarks. */
 #include "browser.h"
 #include "page.h"
+#include "page_images.h"
 #include "fetch.h"
 #include "netio.h"
 #include "ui.h"
@@ -24,6 +25,7 @@
 #include <string.h>
 #include <strings.h>
 #include <time.h>
+#include <ogc/lwp_watchdog.h>
 
 #define HIST_MAX 32
 #define BOOKMARK_MAX 64
@@ -53,11 +55,16 @@ static bool loading;
 static char loading_url[URL_MAX];
 static float restore_scroll = -1;
 static bool settings_request;
+static unsigned automatic_hops;
+static int refresh_generation = -1;
+static u64 refresh_at;
 static Bookmark bookmarks[BOOKMARK_MAX];
 static int nbookmarks;
 static bool bm_open;
 static int bm_scroll;
 static int confirm_delete = -1;
+static int select_field = -1, select_generation, select_count, select_scroll, select_current;
+static SelectOption select_options[64];
 static float last_layout_w, last_layout_scale;
 static bool queued;
 static char queued_url[URL_MAX];
@@ -270,6 +277,9 @@ static void restore_entry(HistEntry *e) {
 }
 
 static void start_load(const char *url, const char *post) {
+    char unwrapped[URL_MAX];
+    if (!post && url_unwrap_redirect(url, unwrapped, sizeof(unwrapped))) url = unwrapped;
+    page.refresh_url[0] = 0;   /* a manual navigation/stop cannot leave an old timer armed */
     if (!strncasecmp(url, "about:", 6)) {
         if (loading) { queued = false; fetch_cancel(); loading = false; }
         free(cur_post);
@@ -303,6 +313,7 @@ static void start_load(const char *url, const char *post) {
 }
 
 static void navigate(const char *url, const char *post, bool record) {
+    automatic_hops = 0;
     if (!url[0]) return;
     lab_note("open: %s%s", url, post ? " (form post)" : "");
     if (record) {
@@ -327,6 +338,7 @@ static void save_link(const char *url) {
 }
 
 static void go_back(void) {
+    automatic_hops = 0;
     if (nback == 0) { sound_play(SFX_ERROR); return; }
     if (has_page && nfwd < HIST_MAX) hist_capture(&fwd_stack[nfwd++]);
     HistEntry e = back_stack[--nback];
@@ -337,6 +349,7 @@ static void go_back(void) {
 }
 
 static void go_forward(void) {
+    automatic_hops = 0;
     if (nfwd == 0) return;
     if (has_page) {
         if (nback == HIST_MAX) { hist_free(&back_stack[0]); memmove(back_stack, back_stack + 1, sizeof(HistEntry) * (HIST_MAX - 1)); nback--; }
@@ -664,22 +677,21 @@ static void apply_image(ImageResult *ir) {
     if (gen != (page_gen & 0xFFFFFF) || idx >= page.nimages) { image_free(&ir->img); return; }
     PageImage *im = &page.images[idx];
     if (!ir->ok) {
+        if (g_set.image_proxy && !im->direct && !url_is_local(im->url)) {
+            im->direct = true;
+            im->state = IMG_NONE;   /* helper failed: try the origin once */
+            return;
+        }
         im->state = IMG_FAILED;
-    } else if (page.image_bytes + ir->img.bytes > IMAGE_BUDGET) {
-        image_free(&ir->img);
-        im->state = IMG_SKIPPED;
     } else {
-        gfx_image_init(&im->img, ir->img.tex, ir->img.w, ir->img.h, ir->img.tex_w, ir->img.tex_h);
-        page.image_bytes += ir->img.bytes;
-        im->state = IMG_READY;
-        /* a picture with a declared size already has its space: just draw it */
-        if (im->decl_w && im->decl_h) return;
+        page_image_accept(&page, idx, &ir->img, IMAGE_BUDGET);
+        return;
     }
     page.relayout = true;
 }
 
-static void image_request_url(const char *src, int max_w, int max_h, char *out, size_t n) {
-    if (!g_set.image_proxy) { snprintf(out, n, "%s", src); return; }
+static void image_request_url(const char *src, bool direct, int max_w, int max_h, char *out, size_t n) {
+    if (!g_set.image_proxy || direct || url_is_local(src)) { snprintf(out, n, "%s", src); return; }
     static char enc[URL_MAX];
     url_encode_component(src, enc, sizeof(enc));
     const Theme *t = theme();
@@ -699,6 +711,8 @@ static bool sheets_pending(void) {
 
 /* Downloads the page's stylesheets first, then its pictures. */
 static void schedule_images(float view_top, float view_h, float max_w) {
+    static int release_tick;
+    if (++release_tick >= 30) { page_images_evict(&page, view_top, view_h); release_tick = 0; }
     if (loading || queued || fetch_state() != FETCH_IDLE || !fetch_net_ready()) return;
     if (g_set.page_styles) {
         int si = page_next_sheet(&page);
@@ -710,18 +724,18 @@ static void schedule_images(float view_top, float view_h, float max_w) {
         if (sheets_pending()) return;
     }
     if (!g_set.load_images) return;
-    if (page.image_bytes >= IMAGE_BUDGET) {
-        bool changed = false;
-        for (int i = 0; i < page.nimages; i++)
-            if (page.images[i].state == IMG_NONE) { page.images[i].state = IMG_SKIPPED; changed = true; }
-        if (changed) page.relayout = true;
-        return;
-    }
+    if (page.image_bytes >= IMAGE_BUDGET) return;
     int pick = -1;
     for (int pass = 0; pass < 2 && pick < 0; pass++) {
-        for (int i = 0; i < page.nboxes; i++) {
-            Box *b = &page.boxes[i];
-            if (b->type != BOX_IMAGE || page.images[b->text].state != IMG_NONE) continue;
+        const int *visible;
+        int nvisible = page_visible(&page, pass == 0 ? view_top - 100 : view_top - view_h,
+                                    pass == 0 ? view_h + 500 : 5 * view_h, &visible);
+        for (int vi = 0; vi < nvisible; vi++) {
+            Box *b = &page.boxes[visible ? visible[vi] : vi];
+            if (b->type != BOX_IMAGE || b->text < 0 || b->text >= page.nimages) continue;
+            PageImage *candidate = &page.images[b->text];
+            if (candidate->state != IMG_NONE && candidate->state != IMG_DEFERRED) continue;
+            if (candidate->state == IMG_DEFERRED && candidate->bytes > IMAGE_BUDGET - page.image_bytes) continue;
             if (pass == 0 && (b->y + b->h < view_top - 100 || b->y > view_top + view_h + 400)) continue;
             pick = b->text;
             break;
@@ -729,18 +743,27 @@ static void schedule_images(float view_top, float view_h, float max_w) {
     }
     if (pick < 0) return;
     PageImage *im = &page.images[pick];
+    if (page_image_shared(&page, pick) >= 0) return;
     static char req[URL_MAX];
     int max_h = (int)settings_max_picture_height();
-    image_request_url(im->url, (int)max_w, max_h, req, sizeof(req));
+    image_request_url(im->url, im->direct, (int)max_w, max_h, req, sizeof(req));
     int tag = ((page_gen & 0xFFFFFF) << 8) | pick;
     if (req[0] && fetch_start_image(req, (int)max_w, max_h, tag)) im->state = IMG_LOADING;
     else if (!req[0]) { im->state = IMG_SKIPPED; page.relayout = true; }
 }
 
-static int images_pending(void) {
+static int images_pending(float top, float height) {
     int n = 0;
-    for (int i = 0; i < page.nimages; i++)
-        if (page.images[i].state == IMG_NONE || page.images[i].state == IMG_LOADING) n++;
+    unsigned char seen[PAGE_MAX_IMAGES] = {0};
+    const int *visible;
+    int count = page_visible(&page, top - 100, height + 500, &visible);
+    for (int vi = 0; vi < count; vi++) {
+        const Box *b = &page.boxes[visible ? visible[vi] : vi];
+        if (b->type != BOX_IMAGE || b->text < 0 || b->text >= page.nimages || seen[b->text] ||
+            b->y + b->h < top - 100 || b->y > top + height + 400) continue;
+        seen[b->text] = 1;
+        if (page.images[b->text].state == IMG_NONE || page.images[b->text].state == IMG_LOADING) n++;
+    }
     return n;
 }
 
@@ -857,7 +880,7 @@ static void field_done(bool ok, const char *text, void *user) {
     /* a form with a single text box (e.g. search) submits right away */
     int texts = 0;
     for (int i = 0; i < page.nfields; i++)
-        if (page.fields[i].form == page.fields[f].form &&
+        if (!page.fields[i].disabled && page.fields[i].form == page.fields[f].form &&
             (page.fields[i].type == FIELD_TEXT || page.fields[i].type == FIELD_PASSWORD)) texts++;
     if (texts == 1 && page.fields[f].form >= 0) submit_form(f, -1);
 }
@@ -941,10 +964,87 @@ static void draw_clock(float right_x, float y) {
     gfx_text(FONT_UI, 15, right_x - w, y, t->text, buf, -1);
 }
 
+static void draw_select(bool interactive) {
+    const Theme *t = theme();
+    float sx, sy, sw, sh;
+    ui_safe_area(&sx, &sy, &sw, &sh);
+    float width = fminf(540, sw - 20), height = fminf(360, sh - 30);
+    float x = sx + (sw - width) * 0.5f, y = sy + (sh - height) * 0.5f;
+    gfx_rect(0, 0, gfx_width(), 480, color_alpha(t->shadow, 0.8f));
+    ui_set_input(interactive);
+    ui_panel(x, y, width, height, 14);
+    gfx_text(FONT_UI, 22, x + 20, y + 14, t->text, "Choose an option", -1);
+    if (ui_icon_button(ui_id("select-close", 0), x + width - 28, y + 28, 16, ICON_CLOSE, true)) select_field = -1;
+    const int rows = 6;
+    if (interactive) {
+        float scroll = input_scroll_delta();
+        int dir = ui_dpad_unhandled();
+        if ((scroll > 15 || dir == DIR_DOWN) && select_scroll + rows < select_count) select_scroll++;
+        if ((scroll < -15 || dir == DIR_UP) && select_scroll > 0) select_scroll--;
+    }
+    for (int i = select_scroll; i < select_count && i < select_scroll + rows; i++) {
+        float yy = y + 58 + (i - select_scroll) * 44;
+        if (ui_button(ui_id("select-option", i), x + 20, yy, width - 40, 38,
+                      select_options[i].label, 17, i == select_current ? UIB_ACCENT : UIB_NORMAL)) {
+            page_select_choose(&page, select_field, &select_options[i]);
+            select_field = -1;
+        }
+    }
+    if (interactive && input_pressed(ACT_BACK)) { input_consume(ACT_BACK); select_field = -1; }
+}
+
 void browser_init(void) {
     page_init(&page);
     bookmarks_load();
     browser_navigate(g_set.home);
+}
+
+void browser_update(void) {
+    handle_fetch_result();
+    if (select_field >= 0 && select_generation != page_gen) select_field = -1;
+    if (!loading && page.refresh_url[0] && automatic_hops < 8) {
+        u64 now = ticks_to_millisecs(SYS_GetSystemTime());
+        if (refresh_generation != page_gen) {
+            refresh_generation = page_gen;
+            refresh_at = now + (u64)page.refresh_seconds * 1000;
+        }
+        if (now >= refresh_at) {
+            char next[URL_MAX];
+            snprintf(next, sizeof(next), "%s", page.refresh_url);
+            automatic_hops++;
+            start_load(next, NULL);   /* a redirect replaces its page in history */
+        }
+    }
+    float sx, sy, sw, sh;
+    ui_safe_area(&sx, &sy, &sw, &sh);
+    float cw = sw - 16, ch = sh - 54 - 16 - 34;
+    float scale = g_set.text_size / 100.0f;
+    static int last_layout_frame, last_load_images = -1, last_alt = -1, last_img_size = -1;
+    if (last_load_images != g_set.load_images || last_alt != g_set.show_alt || last_img_size != g_set.img_size) {
+        last_load_images = g_set.load_images;
+        last_alt = g_set.show_alt;
+        last_img_size = g_set.img_size;
+        page.relayout = true;
+    }
+    if (page.styled_author != (g_set.page_styles != 0)) page.restyle = true;
+    bool image_relayout = page.relayout && ui_frame() - last_layout_frame >= 90;
+    if (has_page && (last_layout_w != cw || last_layout_scale != scale || image_relayout || page.restyle)) {
+        last_layout_frame = ui_frame();
+        diag_note(DIAG_MAIN, "laying out page (%d pictures ready)", page.nimages);
+        page_layout(&page, cw, scale);
+        last_layout_w = cw;
+        last_layout_scale = scale;
+        if (restore_scroll >= 0) { page.scroll = page.scroll_target = restore_scroll; restore_scroll = -1; }
+    }
+
+    if (has_page) {
+        float max_scroll = page.content_h - ch;
+        if (max_scroll < 0) max_scroll = 0;
+        if (page.scroll_target > max_scroll) page.scroll_target = max_scroll;
+        if (page.scroll_target < 0) page.scroll_target = 0;
+        page.scroll += (page.scroll_target - page.scroll) * (g_set.animations ? 0.3f : 1.0f);
+        schedule_images(page.scroll, ch, fminf(cw - 32, 640));
+    }
 }
 
 bool browser_take_settings_request(void) {
@@ -955,8 +1055,7 @@ bool browser_take_settings_request(void) {
 
 void browser_frame(bool interactive) {
     const Theme *t = theme();
-    bool modal = osk_active() || bm_open || dl_state != DL_IDLE;
-    handle_fetch_result();
+    bool modal = osk_active() || bm_open || dl_state != DL_IDLE || select_field >= 0;
 
     float sx, sy, sw, sh;
     ui_safe_area(&sx, &sy, &sw, &sh);
@@ -971,6 +1070,7 @@ void browser_frame(bool interactive) {
     if (ui_icon_button(ui_id("tb", 0), bx, by, r, ICON_BACK, nback > 0)) go_back();
     if (ui_icon_button(ui_id("tb", 1), bx + 44, by, r, ICON_FORWARD, nfwd > 0)) go_forward();
     if (ui_icon_button(ui_id("tb", 2), bx + 88, by, r, loading ? ICON_STOP : ICON_RELOAD, true)) {
+        automatic_hops = 0;
         if (loading) { queued = false; fetch_cancel(); }
         else if (has_page) { restore_scroll = page.scroll_target; start_load(page.url, NULL); }
     }
@@ -1007,25 +1107,6 @@ void browser_frame(bool interactive) {
     gfx_shadow(cx + 2, cy + 4, cw, ch, 14, 6, t->shadow);
     gfx_rrect(cx, cy, cw, ch, 14, has_page && page.dom ? page.bg : t->page_bg);
 
-    float scale = g_set.text_size / 100.0f;
-    static int last_layout_frame, last_load_images = -1, last_alt = -1, last_img_size = -1;
-    if (last_load_images != g_set.load_images || last_alt != g_set.show_alt || last_img_size != g_set.img_size) {
-        last_load_images = g_set.load_images;
-        last_alt = g_set.show_alt;
-        last_img_size = g_set.img_size;
-        page.relayout = true;
-    }
-    if (page.styled_author != (g_set.page_styles != 0)) page.restyle = true;
-    bool image_relayout = page.relayout && ui_frame() - last_layout_frame >= 90;
-    if (has_page && (last_layout_w != cw || last_layout_scale != scale || image_relayout || page.restyle)) {
-        last_layout_frame = ui_frame();
-        diag_note(DIAG_MAIN, "laying out page (%d pictures ready)", page.nimages);
-        page_layout(&page, cw, scale);
-        last_layout_w = cw;
-        last_layout_scale = scale;
-        if (restore_scroll >= 0) { page.scroll = page.scroll_target = restore_scroll; restore_scroll = -1; }
-    }
-
     int hover_link = -1, hover_field = -1;
     if (has_page) {
         /* scrolling */
@@ -1035,18 +1116,15 @@ void browser_frame(bool interactive) {
             if (d == DIR_DOWN) page.scroll_target += 120;
             if (d == DIR_UP) page.scroll_target -= 120;
         }
-        float max_scroll = page.content_h - ch;
-        if (max_scroll < 0) max_scroll = 0;
-        if (page.scroll_target > max_scroll) page.scroll_target = max_scroll;
-        if (page.scroll_target < 0) page.scroll_target = 0;
-        page.scroll += (page.scroll_target - page.scroll) * (g_set.animations ? 0.3f : 1.0f);
-        schedule_images(page.scroll, ch, fminf(cw - 32, 640));
-
         /* register visible links/fields as targets and find the hovered one */
         float px = input_cursor_x(), py = input_cursor_y();
-        for (int i = 0; i < page.nboxes; i++) {
+        const int *visible;
+        int nvisible = page_visible(&page, page.scroll, ch, &visible);
+        for (int vi = 0; vi < nvisible; vi++) {
+            int i = visible ? visible[vi] : vi;
             Box *b = &page.boxes[i];
             if (b->link < 0 && b->field < 0) continue;
+            if (b->field >= 0 && page.fields[b->field].disabled) continue;
             float yy = cy + b->y - page.scroll;
             if (yy + b->h < cy || yy > cy + ch) continue;
             float y0 = fmaxf(yy, cy), y1 = fminf(yy + b->h, cy + ch);
@@ -1076,7 +1154,14 @@ void browser_frame(bool interactive) {
                 int ft = page.fields[hover_field].type;
                 if (ft == FIELD_SUBMIT) submit_form(hover_field, hover_field);
                 else if (ft == FIELD_CHECK || ft == FIELD_RADIO) page_toggle_field(&page, hover_field);
-                else if (ft == FIELD_SELECT) ui_toast("Changing drop-down choices isn't supported yet");
+                else if (ft == FIELD_SELECT) {
+                    select_count = page_select_options(&page, hover_field, select_options, 64, &select_current);
+                    if (select_count) {
+                        select_field = hover_field;
+                        select_generation = page_gen;
+                        select_scroll = select_current > 5 ? select_current - 5 : 0;
+                    }
+                }
                 else edit_field(hover_field);
             } else if (page_link_is_download(&page, hover_link) || input_held(ACT_SLOW)) {
                 save_link(page_link_url(&page, hover_link));
@@ -1113,8 +1198,8 @@ void browser_frame(bool interactive) {
         snprintf(status, sizeof(status), "Loading page styles...");
         ui_spinner(sbx + 8, sby + 10, 14);
         sbx += 24;
-    } else if (has_page && g_set.load_images && images_pending() > 0 && netio_state() == NET_UP) {
-        snprintf(status, sizeof(status), "Loading pictures (%d left)", images_pending());
+    } else if (has_page && g_set.load_images && images_pending(page.scroll, ch) > 0 && netio_state() == NET_UP) {
+        snprintf(status, sizeof(status), "Loading pictures (%d left)", images_pending(page.scroll, ch));
         ui_spinner(sbx + 8, sby + 10, 14);
         sbx += 24;
     } else if (netio_state() != NET_UP) {
@@ -1142,6 +1227,7 @@ void browser_frame(bool interactive) {
     }
 
     /* ---- modal layers */
+    if (select_field >= 0) draw_select(interactive && !osk_active());
     if (dl_state != DL_IDLE) draw_download(interactive && !osk_active());
     if (bm_open) {
         bool bm_input = interactive && !osk_active();

@@ -4,6 +4,7 @@
 #include <stdbool.h>
 
 void browser_init(void);
+void browser_update(void);              /* once before drawing the active screen */
 void browser_frame(bool interactive);   /* update + draw */
 bool browser_take_settings_request(void);
 void browser_navigate(const char *url);
