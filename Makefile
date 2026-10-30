@@ -11,6 +11,9 @@ endif
 
 # libogc2 (Swiss developers' fork): supports the official BBA and WIZnet-based
 # adapters such as ETH2GC, plus SD2SP2 and other modern accessories.
+# The bundled build uses another checkout path; keep tested DOL bytes identical.
+BROWSER_ROOT := $(abspath $(dir $(lastword $(MAKEFILE_LIST))))
+
 include $(DEVKITPRO)/libogc2/gamecube_rules
 
 MBEDTLS		:=	third_party/mbedtls
@@ -34,6 +37,7 @@ DATA		:=
 INCLUDES	:=	source
 
 CFLAGS	=	-g -O2 -Wall -std=gnu11 $(MACHDEP) $(INCLUDE) \
+		-ffile-prefix-map=$(BROWSER_ROOT)=/src \
 		-DMBEDTLS_USER_CONFIG_FILE='"gc_mbedtls_config.h"'
 CXXFLAGS	=	$(CFLAGS)
 LDFLAGS	=	-g $(MACHDEP) -Wl,-Map,$(notdir $@).map

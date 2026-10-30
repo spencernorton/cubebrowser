@@ -1,3 +1,16 @@
+## 2026-10-29 — Keep launcher clock and packaged bytes consistent
+
+Use the TLS/network UTC clock for preference expiry. Indigo's RTC is local;
+normalize a known inherited offset, and keep an unknown integrated display on
+the console clock. Time controls remain inherited without overwriting saved
+standalone values. Clock context host checks and the target build pass.
+
+Normalize source filename prefixes so a browser built under Indigo's package
+checkout has the exact DOL bytes tested by the browser producer. Two fresh
+local builds at /src and /work/browser-src match byte-for-byte. Required CI
+repeats this comparison before its runtime routes. No dependency, CA, loader,
+lab opt-in or physical qualification rule changes.
+
 ## 2026-10-29 — Remember the start-page weather ZIP
 
 Support only the start page's host-only five-digit indigo_zip preference on
