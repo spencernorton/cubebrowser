@@ -84,3 +84,8 @@ python3 tests/runtime/run_indigo.py --dol cubebrowser.dol --card-files sd/gcbrow
 
 This proves the emulated SD2SP2 round trip. Physical adapters, cables and the
 installed console remain separate qualification.
+
+CI repeats the round trip with `--no-motion` and checks that the saved
+standalone animation preference also survives. Both profiles use complete
+texture hashing: two DOLs reuse texture addresses, and Dolphin's sampled
+cache can otherwise retain stale texels after a reload.

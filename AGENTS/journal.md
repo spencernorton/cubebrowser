@@ -1,3 +1,11 @@
+## 2026-10-30 — Check reloads with complete textures and motion off
+
+Use the harness's complete texture hashing for two DOLs reusing texture
+addresses. The motion-off replay restores the cube with this setting, matching
+the documented Dolphin sampling limitation. Repeat both return controls with
+motion off in required CI and require saved standalone animation to survive
+alongside colour/aspect. The guest browser and Indigo fixture stay unchanged.
+
 ## 2026-10-30 — Exercise the real Indigo launch and reload path
 
 Require an actual Web-face launch and two return trips with the pinned green

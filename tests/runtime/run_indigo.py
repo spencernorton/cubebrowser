@@ -29,6 +29,7 @@ def main():
     parser.add_argument("--indigo-provenance", type=Path, required=True)
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--cpu-core", type=int, choices=(0, 1, 3, 5))
+    parser.add_argument("--no-motion", action="store_true")
     args = parser.parse_args()
     out = args.out.resolve()
     out.mkdir(parents=True, exist_ok=True)
@@ -95,7 +96,8 @@ def main():
             (root / "games").mkdir()
             (root / "swiss/settings/global.ini").write_text(
                 "Menu Color=Spice\nMenu Widescreen=Yes\nCube=Classic\nUp Face=None\n"
-                "Left Face=None\nRight Face=None\nDown Face=Web\nDisable UI Animations=No\n"
+                "Left Face=None\nRight Face=None\nDown Face=Web\n"
+                f"Disable UI Animations={'Yes' if args.no_motion else 'No'}\n"
                 "Disable Animated Backdrop=Yes\nDisable Panel Transparency=Yes\n"
                 "Disable Menu Music=Yes\nDisable Menu SFX=Yes\nDisable PAD Rumble=Yes\n"
                 "Library Path=sdc:/games\nInitNetwork=No\nNTPSync=No\nTimeZone=UTC0\n")
@@ -109,7 +111,8 @@ def main():
                 sp.run(["mcopy", "-i", str(card), "-s", str(item), "::/"], check=True)
 
             em = harness.Emulator(args.indigo_dol.resolve(), None, work, out, region="ntsc",
-                                  storage="sd2sp2", card=card, cable="component", empty_slots=True)
+                                  storage="sd2sp2", card=card, cable="component", empty_slots=True,
+                                  exact_textures=True)
             route = harness.Route(em, out, fresh_card=False, cable="component", region="ntsc",
                                   storage="sd2sp2", menu_wide=True, sd_image=card)
             home = route.boot()
@@ -180,7 +183,7 @@ def main():
                                "home_controls_responded": True})
 
             saved = sp.check_output(["mtype", "-i", str(card), "::/gcbrowser/settings.ini"]).decode().splitlines()
-            if "disp.aspect=0" not in saved or "disp.theme=0" not in saved:
+            if not {"disp.aspect=0", "disp.theme=0", "disp.anim=1"}.issubset(saved):
                 raise RuntimeError("Inherited appearance overwrote standalone browser preferences")
             log = (out / "dolphin.log").read_text(errors="replace")
             if re.search(r"Invalid (?:read|write)|DSI exception|ISI exception|Unhandled exception", log, re.I):
@@ -190,6 +193,7 @@ def main():
                 "indigo_sha256": indigo_hash, "indigo_revision": provenance["revision"],
                 "round_trips": rounds, "requests": requests, "named_spice_inherited": True,
                 "standalone_appearance_preserved": True,
+                "animations_disabled": args.no_motion, "complete_texture_hashing": True,
                 "return_path": "Unmodified Indigo STUBHAXX reads the real FAT IPL.DOL; no HBReload HLE interception",
                 "physical_hardware": "Not qualified by this emulator route",
             }, indent=2) + "\n")

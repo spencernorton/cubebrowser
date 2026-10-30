@@ -120,6 +120,12 @@ jobs:
             python3 tests/runtime/run_indigo.py --dol cubebrowser.dol --card-files sd/gcbrowser \
               --indigo-src /indigo --indigo-dol /indigo/cube/swiss/swiss.dol \
               --indigo-provenance runtime-evidence/indigo-return/indigo-provenance.json --out runtime-evidence/indigo-return
+          docker run --rm --network cube-indigo --ip 192.0.2.3 --cpus 2 --memory 3g \
+            -v "$PWD:/work" -v "$RUNNER_TEMP/indigo:/indigo:ro" cube-runtime \
+            python3 tests/runtime/run_indigo.py --dol cubebrowser.dol --card-files sd/gcbrowser \
+              --indigo-src /indigo --indigo-dol /indigo/cube/swiss/swiss.dol \
+              --indigo-provenance runtime-evidence/indigo-return/indigo-provenance.json \
+              --out runtime-evidence/indigo-return-motion-off --no-motion
 
       - name: Runtime evidence
         if: always()
