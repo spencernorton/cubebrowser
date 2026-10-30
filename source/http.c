@@ -7,7 +7,6 @@
 #include "settings.h"
 #include "gzip.h"
 #include "start_pref.h"
-#include <time.h>
 #include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -157,7 +156,7 @@ static int fetch_once(const char *url, const char *post, const char *accept, Htt
     else snprintf(hosthdr, sizeof(hosthdr), "%s:%u", u.host, u.port);
     char preference[48] = "";
     if (!post && hooks && hooks->start_preferences)
-        start_pref_request(url, kconn.verified, (uint64_t)time(NULL), preference, sizeof(preference));
+        start_pref_request(url, kconn.verified, (uint64_t)netio_now(), preference, sizeof(preference));
     int n = snprintf(req, sizeof(req),
                      "%s %s HTTP/1.1\r\nHost: %s\r\nUser-Agent: %s\r\nAccept: %s\r\n"
                      "Accept-Language: en\r\nAccept-Encoding: gzip\r\n%sConnection: keep-alive\r\n",
@@ -226,7 +225,7 @@ static int fetch_once(const char *url, const char *post, const char *accept, Htt
             }
         }
         else if (!strcasecmp(line, "set-cookie") && hooks && hooks->start_preferences)
-            start_pref_receive(url, kconn.verified, val, (uint64_t)time(NULL));
+            start_pref_receive(url, kconn.verified, val, (uint64_t)netio_now());
         else if (!strcasecmp(line, "content-type")) snprintf(res->content_type, sizeof(res->content_type), "%s", val);
         else if (!strcasecmp(line, "location")) snprintf(location, loclen, "%s", val);
         else if (!strcasecmp(line, "connection") && contains_nocase(val, "close")) server_close = true;

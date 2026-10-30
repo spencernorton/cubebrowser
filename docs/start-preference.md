@@ -17,7 +17,7 @@ cookies are ignored. To clear the preference:
 Set-Cookie: indigo_zip=; Path=/indigo/start/; Max-Age=0; Secure; HttpOnly; SameSite=Lax
 ```
 
-Read and write only after certificate verification. Send `Cookie:
+Read and write only after certificate verification, using the same UTC clock as TLS. Send `Cookie:
 indigo_zip=80202` on subsequent safe GET page navigations in scope and on
 in-scope image/stylesheets initiated by a start page. Other pages' subresources,
 other origins/paths, unverified TLS, explicit download streams and POST requests receive no
