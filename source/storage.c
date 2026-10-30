@@ -55,14 +55,14 @@ bool storage_init(void) {
 bool storage_ok(void) { return mounted; }
 const char *storage_device_name(void) { return device; }
 
-char *storage_read(const char *path, size_t *len_out) {
+char *storage_read_limit(const char *path, size_t maximum, size_t *len_out) {
     if (!mounted) return NULL;
     FILE *f = fopen(path, "rb");
     if (!f) return NULL;
     fseek(f, 0, SEEK_END);
     long len = ftell(f);
     fseek(f, 0, SEEK_SET);
-    if (len < 0 || len > 8 * 1024 * 1024) { fclose(f); return NULL; }
+    if (len < 0 || (size_t)len > maximum || maximum > 8 * 1024 * 1024) { fclose(f); return NULL; }
     char *buf = malloc((size_t)len + 1);
     if (!buf) { fclose(f); return NULL; }
     size_t got = fread(buf, 1, (size_t)len, f);
@@ -70,6 +70,10 @@ char *storage_read(const char *path, size_t *len_out) {
     buf[got] = 0;
     if (len_out) *len_out = got;
     return buf;
+}
+
+char *storage_read(const char *path, size_t *len_out) {
+    return storage_read_limit(path, 8 * 1024 * 1024, len_out);
 }
 
 /* Write to a temp file, then swap it in, so a power cut never leaves a

@@ -71,6 +71,19 @@ jobs:
             python3 tests/runtime/run.py --dol cubebrowser.dol --card-files sd/gcbrowser \
               --out runtime-evidence/wide-pal-port4 --wide --pal --pad-port 4
 
+      - name: Prove ZIP persistence across browser restarts
+        run: |
+          mkdir -p "$RUNNER_TEMP/zip-cert"
+          openssl req -x509 -newkey rsa:2048 -nodes -sha256 -days 2 \
+            -config tests/runtime/zip-cert.cnf -keyout "$RUNNER_TEMP/zip-cert/key.pem" \
+            -out "$RUNNER_TEMP/zip-cert/cert.pem"
+          docker network create --internal --subnet 192.0.2.0/24 cube-zip
+          trap 'docker network rm cube-zip' EXIT
+          docker run --rm --network cube-zip --ip 192.0.2.3 --cpus 2 --memory 3g \
+            -v "$PWD:/work" -v "$RUNNER_TEMP/zip-cert:/cert:ro" cube-runtime \
+            python3 tests/runtime/run_zip.py --dol cubebrowser.dol --card-files sd/gcbrowser \
+              --cert-dir /cert --out runtime-evidence/zip-restarts
+
       - name: Runtime evidence
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1

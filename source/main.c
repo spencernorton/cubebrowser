@@ -18,6 +18,7 @@
 #include "diag.h"
 #include "lab.h"
 #include "launch.h"
+#include "start_pref.h"
 
 enum { SCREEN_BROWSER, SCREEN_SETTINGS };
 
@@ -80,6 +81,7 @@ int main(int argc, char **argv) {
     theme_set(g_set.theme);
     entropy_init();
     sound_init();
+    start_pref_load();
     fetch_init();
     browser_init();
     lab_start();

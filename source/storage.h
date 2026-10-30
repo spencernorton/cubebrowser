@@ -8,5 +8,6 @@
 bool storage_init(void);
 bool storage_ok(void);
 const char *storage_device_name(void);
+char *storage_read_limit(const char *path, size_t maximum, size_t *len_out);
 char *storage_read(const char *path, size_t *len_out);  /* malloc'd, NUL-terminated */
 bool storage_write_atomic(const char *path, const char *tmp_path, const void *data, size_t len);

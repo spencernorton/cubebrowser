@@ -29,3 +29,5 @@ $CC $CF -Itools/fuzz/stubs -Isource tools/tests/test_launch.c source/launch.c so
 $CC $CF -Itools/tests -Itools/tests/stubs -Itools/fuzz/stubs -Isource -include tools/tests/input_sdk.h \
     tools/tests/test_input.c source/input.c source/controller.c -lm -o "$WORK/input"
 "$WORK/input"
+$CC $CF -Itools/fuzz/stubs -Isource tools/tests/test_start_pref.c source/start_pref.c source/url.c -o "$WORK/start-pref"
+"$WORK/start-pref"

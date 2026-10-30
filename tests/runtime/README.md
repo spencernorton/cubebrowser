@@ -38,3 +38,14 @@ The latter boots PAL interlaced video with an anamorphic layout and the pad
 in the fourth port. The optional `--cpu-core 5` explicitly selects Dolphin's
 cached interpreter for ARM hosts whose default JIT exits even on the unchanged
 baseline. CI uses the default core; this option does not mask a failed route.
+
+ZIP persistence has a separate required `run_zip.py` route. Generate an
+expiring self-signed fixture certificate with `zip-cert.cnf` (as the workflow
+shows), then pass its directory with `--cert-dir`. The test starts private DNS
+and TLS servers on an isolated network. Its temporary CA is copied only into
+the private FAT image; the packaged CA bundle is unchanged. The actual DOL
+saves the response preference, sends it on the first request after a new boot,
+clears it through controller navigation and leaves it cleared after a third
+boot. Read back the real FAT file after each boot. Request evidence also proves
+path isolation and first-party weather-resource support. This is emulator card
+qualification, not a claim about a physical card or the production form.

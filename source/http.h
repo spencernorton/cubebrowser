@@ -24,6 +24,7 @@ typedef struct {
     void (*stage)(const char *msg);
     /* optional: return false to stop before the body (e.g. it's a file download) */
     bool (*want_body)(const char *url, const char *content_type);
+    bool start_preferences;   /* page or resources of the first-party start page; no general jar */
 } HttpHooks;
 
 /* post_body may be NULL (GET); accept may be NULL for the default page types.

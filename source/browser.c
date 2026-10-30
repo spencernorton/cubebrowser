@@ -2,6 +2,7 @@
 #include "browser.h"
 #include "page.h"
 #include "page_images.h"
+#include "start_pref.h"
 #include "fetch.h"
 #include "netio.h"
 #include "ui.h"
@@ -671,7 +672,7 @@ static void apply_image(ImageResult *ir) {
     if (gen != (page_gen & 0xFFFFFF) || idx >= page.nimages) { image_free(&ir->img); return; }
     PageImage *im = &page.images[idx];
     if (!ir->ok) {
-        if (g_set.image_proxy && !im->direct && !url_is_local(im->url)) {
+        if (g_set.image_proxy && !im->direct && !url_is_local(im->url) && !start_pref_scope(im->url)) {
             im->direct = true;
             im->state = IMG_NONE;   /* helper failed: try the origin once */
             return;
@@ -685,7 +686,7 @@ static void apply_image(ImageResult *ir) {
 }
 
 static void image_request_url(const char *src, bool direct, int max_w, int max_h, char *out, size_t n) {
-    if (!g_set.image_proxy || direct || url_is_local(src)) { snprintf(out, n, "%s", src); return; }
+    if (!g_set.image_proxy || direct || url_is_local(src) || start_pref_scope(src)) { snprintf(out, n, "%s", src); return; }
     static char enc[URL_MAX];
     url_encode_component(src, enc, sizeof(enc));
     const Theme *t = theme();
@@ -712,7 +713,7 @@ static void schedule_images(float view_top, float view_h, float max_w) {
         int si = page_next_sheet(&page);
         if (si >= 0) {
             int tag = ((page_gen & 0xFFFFFF) << 8) | si;
-            if (!fetch_start_css(page.sheets[si].url, tag)) page.sheets[si].state = SHEET_NONE;
+            if (!fetch_start_css(page.sheets[si].url, tag, start_pref_scope(page.url))) page.sheets[si].state = SHEET_NONE;
             return;
         }
         if (sheets_pending()) return;
@@ -742,7 +743,7 @@ static void schedule_images(float view_top, float view_h, float max_w) {
     int max_h = (int)settings_max_picture_height();
     image_request_url(im->url, im->direct, (int)max_w, max_h, req, sizeof(req));
     int tag = ((page_gen & 0xFFFFFF) << 8) | pick;
-    if (req[0] && fetch_start_image(req, (int)max_w, max_h, tag)) im->state = IMG_LOADING;
+    if (req[0] && fetch_start_image(req, (int)max_w, max_h, tag, start_pref_scope(page.url))) im->state = IMG_LOADING;
     else if (!req[0]) { im->state = IMG_SKIPPED; page.relayout = true; }
 }
 
@@ -1034,6 +1035,12 @@ void browser_init(void) {
 }
 
 void browser_update(void) {
+    switch (start_pref_take_notice()) {
+    case START_PREF_SAVED: ui_toast("Weather ZIP saved on this card"); break;
+    case START_PREF_CLEARED: ui_toast("Saved weather ZIP cleared"); break;
+    case START_PREF_UNSAVED: ui_toast("Weather ZIP kept for this visit; card save failed"); break;
+    default: break;
+    }
     handle_fetch_result();
     if (select_field >= 0 && select_generation != page_gen) select_field = -1;
     if (!loading && page.refresh_url[0] && automatic_hops < 8) {

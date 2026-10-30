@@ -33,6 +33,7 @@ static bool worker_ready;
 static char job_url[URL_MAX];
 static char *job_post;
 static int job_max_w, job_max_h, job_tag;
+static bool job_first_party;
 static HttpResult result;
 static ImageResult img_result;
 static char stage_buf[192] = "";
@@ -90,7 +91,7 @@ static void run_image_job(void) {
     ImageResult ir;
     memset(&ir, 0, sizeof(ir));
     ir.tag = job_tag;
-    HttpHooks hooks = { &cancel_flag, &progress, no_stage };
+    HttpHooks hooks = { &cancel_flag, &progress, no_stage, NULL, job_first_party };
     HttpResult r;
     if (!http_fetch(job_url, NULL, "image/jpeg,image/png,image/gif;q=0.8,image/bmp;q=0.5", &r, &hooks)) {
         snprintf(ir.error, sizeof(ir.error), "%s", r.error);
@@ -123,13 +124,13 @@ static void *worker_main(void *arg) {
                 task_ok = unzip_file(task_path, task_dest, &uz_progress, &cancel_flag, task_err, sizeof(task_err));
             } else if (kind == JOB_CSS) {
                 diag_note(DIAG_WORKER, "downloading stylesheet %.120s", job_url);
-                HttpHooks hooks = { &cancel_flag, &progress, no_stage };
+                HttpHooks hooks = { &cancel_flag, &progress, no_stage, NULL, job_first_party };
                 HttpResult r;
                 if (http_fetch(job_url, NULL, "text/css,*/*;q=0.1", &r, &hooks) && r.status >= 400) http_result_free(&r);
                 result = r;
             } else {
                 diag_note(DIAG_WORKER, "downloading page %.120s", job_url);
-                HttpHooks hooks = { &cancel_flag, &progress, set_stage, page_wants_body };
+                HttpHooks hooks = { &cancel_flag, &progress, set_stage, page_wants_body, true };
                 HttpResult r;
                 http_fetch(job_url, job_post, NULL, &r, &hooks);
                 free(job_post);
@@ -169,7 +170,7 @@ static bool start_page(const char *url, const char *post_body, bool force_save) 
     return true;
 }
 
-bool fetch_start_image(const char *url, int max_w, int max_h, int tag) {
+bool fetch_start_image(const char *url, int max_w, int max_h, int tag, bool first_party) {
     if (!worker_ready || state != FETCH_IDLE || !net_ready) return false;
     if (strlen(url) >= sizeof(job_url)) return false;
     snprintf(job_url, sizeof(job_url), "%s", url);
@@ -177,6 +178,7 @@ bool fetch_start_image(const char *url, int max_w, int max_h, int tag) {
     job_max_w = max_w;
     job_max_h = max_h;
     job_tag = tag;
+    job_first_party = first_party;
     kind = JOB_IMAGE;
     cancel_flag = 0;
     progress = 0;
@@ -186,11 +188,12 @@ bool fetch_start_image(const char *url, int max_w, int max_h, int tag) {
     return true;
 }
 
-bool fetch_start_css(const char *url, int tag) {
+bool fetch_start_css(const char *url, int tag, bool first_party) {
     if (!worker_ready || state != FETCH_IDLE || !net_ready || strlen(url) >= sizeof(job_url)) return false;
     snprintf(job_url, sizeof(job_url), "%s", url);
     job_post = NULL;
     job_tag = tag;
+    job_first_party = first_party;
     kind = JOB_CSS;
     cancel_flag = 0;
     progress = 0;
