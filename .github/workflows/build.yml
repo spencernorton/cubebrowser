@@ -47,6 +47,9 @@ jobs:
             -Isource tools/lab/test_ui_lab.c source/ui_lab.c -o "$RUNNER_TEMP/test_ui_lab"
           "$RUNNER_TEMP/test_ui_lab"
 
+      - name: Check saved HTML and CSS regressions
+        run: sh tools/fuzz/run.sh --regressions
+
       - name: Download mbedTLS
         run: sh get-mbedtls.sh
 

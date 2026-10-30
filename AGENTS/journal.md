@@ -1,3 +1,11 @@
+## 2026-10-29 — Require saved parser regressions
+
+Repair the host SDK stand-in after gfx.h gained the video-mode type and add
+a deterministic sanitizer driver for the saved HTML/CSS inputs. The required
+build runs these cases before building and booting its DOL. The runner works
+from any directory; only extended fuzzing needs libFuzzer. All seven saved
+cases pass with host AddressSanitizer and UndefinedBehaviorSanitizer.
+
 ## 2026-10-29 — Boot and browser behavior gate
 
 The required build now boots its own DOL with an emulated SD card, Broadband
