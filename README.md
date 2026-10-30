@@ -5,7 +5,10 @@ network connection, including secure (HTTPS) sites, with pictures, page
 styles, tables and forms, all controlled with a standard GameCube controller.
 It runs as a `.dol` program launched from Swiss.
 
-<img width="4096" height="2382" alt="IMG_20261014_224514833_HDR" src="https://github.com/user-attachments/assets/2ef54948-d5dc-43be-a0e3-c18770a2b286" />
+<p align="center"><picture><source media="(prefers-reduced-motion: reduce)" srcset="docs/demos/controller-walkthrough-still.png"><img src="docs/demos/controller-walkthrough.gif" width="640" alt="Use CubeBrowser’s bookmarks, menu, settings and address keyboard, follow a link and return to the previous page."></picture></p>
+
+A sampled controller walkthrough from the actual PowerPC browser in Dolphin,
+using a local demonstration page. [Capture details and still image](docs/demos/README.md).
 
 ---
 
@@ -26,7 +29,7 @@ Component cables are optional; they unlock 480p video.
 
 ### 1. Get the files
 
-Download the latest .zip build
+Download the latest **cubebrowser** build from [GitHub Actions](https://github.com/spencernorton/cubebrowser/actions/workflows/build.yml) (a GitHub account is required to download build artifacts). [Tagged builds](https://github.com/spencernorton/cubebrowser/releases) are listed separately; the Actions artifact follows current development. The zip contains:
 
 - `cubebrowser.dol`, the browser itself
 - a `gcbrowser` folder with `cacert.pem`, the list of trusted certificates
