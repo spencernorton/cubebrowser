@@ -26,7 +26,7 @@ jobs:
 
       - name: Cache the pinned emulator image
         id: emulator-cache
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: /tmp/cube-emulator.tar
           key: cube-emulator-amd64-${{ hashFiles('tests/runtime/Dockerfile', 'tests/runtime/dolphin/*.patch') }}
@@ -39,6 +39,13 @@ jobs:
             docker build -t cube-runtime tests/runtime
             docker save cube-runtime -o /tmp/cube-emulator.tar
           fi
+
+      - name: Save the built emulator before runtime checks
+        if: steps.emulator-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: /tmp/cube-emulator.tar
+          key: ${{ steps.emulator-cache.outputs.cache-primary-key }}
 
       - name: Test the console lab's request parser
         # ui_lab.c and its test are Indigo's, copied unchanged.
@@ -70,6 +77,8 @@ jobs:
 
       - name: Boot and use this candidate
         run: |
+          # Container output must not create this runner-owned parent as root.
+          mkdir -p runtime-evidence
           docker network create --internal --subnet 192.0.2.0/24 cube-runtime
           trap 'docker network rm cube-runtime' EXIT
           docker run --rm --network cube-runtime --ip 192.0.2.3 --cpus 2 --memory 3g \

@@ -1,3 +1,12 @@
+## 2026-10-30 — Keep CI evidence writable and cache completed emulator builds
+
+The x86 job passed the older runtime routes and reproduced the exact Indigo
+fixture, then could not create its provenance directory: prior root containers
+had created the evidence parent. Create that parent as the runner before the
+first runtime container. Save the built emulator immediately after preparation,
+so a later fixture/test failure does not discard the expensive image cache.
+The required checks and guest DOLs retain their existing contracts.
+
 ## 2026-10-30 — Check reloads with complete textures and motion off
 
 Use the harness's complete texture hashing for two DOLs reusing texture
