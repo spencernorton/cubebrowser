@@ -130,7 +130,8 @@ static void *worker_main(void *arg) {
                 result = r;
             } else {
                 diag_note(DIAG_WORKER, "downloading page %.120s", job_url);
-                HttpHooks hooks = { &cancel_flag, &progress, set_stage, page_wants_body, true };
+                HttpHooks hooks = { &cancel_flag, &progress, set_stage, page_wants_body,
+                    !job_force_save && !is_download_name(job_url) };
                 HttpResult r;
                 http_fetch(job_url, job_post, NULL, &r, &hooks);
                 free(job_post);

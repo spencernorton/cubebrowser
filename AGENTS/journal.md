@@ -6,7 +6,7 @@ SameSite=Lax, the exact path and a bounded Max-Age. Persist a small versioned
 record on the selected card; retain visit-only state with an honest toast if
 saving fails. Clearing expires and empties the record. Send it on safe GET
 navigations and first-party start-page resources, never other pages' resources,
-paths/origins, unverified TLS, downloads or POSTs. Fetch start-page images
+paths/origins, unverified TLS, explicit downloads or POSTs. Fetch start-page images
 directly so the image helper does not receive the ZIP.
 
 Nine sanitizer host suites pass. The target builds, and the local pinned

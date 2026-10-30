@@ -20,7 +20,7 @@ Set-Cookie: indigo_zip=; Path=/indigo/start/; Max-Age=0; Secure; HttpOnly; SameS
 Read and write only after certificate verification. Send `Cookie:
 indigo_zip=80202` on subsequent safe GET page navigations in scope and on
 in-scope image/stylesheets initiated by a start page. Other pages' subresources,
-other origins/paths, unverified TLS, downloads and POST requests receive no
+other origins/paths, unverified TLS, explicit download streams and POST requests receive no
 preference header. A save/clear POST must carry its submitted value or action
 in the body; its verified response may set the preference and redirect to a
 GET. Same-origin start-page images bypass the image helper, so a small weather
