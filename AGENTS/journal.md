@@ -1,3 +1,13 @@
+## 2026-10-29 — Make packaged object order independent of locale
+
+The exact Indigo CI package exposed a second reproducibility input: glob()
+sorts source filenames using the host locale. The plain SDK uses en_US.UTF-8;
+Indigo's runner uses C.UTF-8. Sort source basenames with make before linking.
+The required comparison now changes locale, checkout path and parallelism to
+match Indigo's package build. Requalify the resulting DOL through all normal
+runtime routes and the actual Indigo package handoff; earlier binary hashes
+remain historical evidence, not qualification of this new artifact.
+
 ## 2026-10-29 — Keep launcher clock and packaged bytes consistent
 
 Use the TLS/network UTC clock for preference expiry. Indigo's RTC is local;

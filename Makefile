@@ -53,7 +53,9 @@ export VPATH	:=	$(foreach dir,$(SOURCES),$(CURDIR)/$(dir)) \
 			$(foreach dir,$(DATA),$(CURDIR)/$(dir))
 export DEPSDIR	:=	$(CURDIR)/$(BUILD)
 
-CFILES		:=	$(foreach dir,$(SOURCES),$(notdir $(wildcard $(dir)/*.c)))
+# glob() follows the host locale; make's sort keeps the link order identical
+# in the SDK's en_US locale and Indigo's C.UTF-8 build runner.
+CFILES		:=	$(foreach dir,$(SOURCES),$(sort $(notdir $(wildcard $(dir)/*.c))))
 BINFILES	:=	$(foreach dir,$(DATA),$(notdir $(wildcard $(dir)/*.*)))
 
 export LD	:=	$(CC)

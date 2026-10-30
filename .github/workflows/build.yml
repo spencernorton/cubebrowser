@@ -64,8 +64,8 @@ jobs:
           mkdir -p "$RUNNER_TEMP/browser-bundle"
           git archive HEAD | tar -x -C "$RUNNER_TEMP/browser-bundle"
           cp -R third_party "$RUNNER_TEMP/browser-bundle/"
-          docker run --rm -v "$RUNNER_TEMP/browser-bundle:/work/browser-src" -w /work/browser-src \
-            ghcr.io/extremscorner/libogc2@sha256:f9ffb7e33c4ba4010da8e40c01366f7c24732130146abd99690403bd42d3e4c2 make
+          docker run --rm -e LC_ALL=C.UTF-8 -v "$RUNNER_TEMP/browser-bundle:/work/browser-src" -w /work/browser-src \
+            ghcr.io/extremscorner/libogc2@sha256:f9ffb7e33c4ba4010da8e40c01366f7c24732130146abd99690403bd42d3e4c2 make -j8
           cmp cubebrowser.dol "$RUNNER_TEMP/browser-bundle/cubebrowser.dol"
 
       - name: Boot and use this candidate
