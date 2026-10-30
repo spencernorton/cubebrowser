@@ -356,6 +356,17 @@ last two into `third_party/`.
 
 ### Project layout
 
+The required build runs the saved HTML/CSS parser regressions with address
+and undefined-behavior sanitizers, then boots and uses the actual DOL in the
+emulator. To run the parser cases locally with Clang:
+
+```sh
+sh tools/fuzz/run.sh --regressions
+```
+
+Pass a number of seconds instead to run both parser fuzz targets after the
+saved cases. Generated inputs stay in a temporary directory.
+
 | Path | Contents |
 |---|---|
 | `source/main.c` | Start-up, main loop, screen transitions |

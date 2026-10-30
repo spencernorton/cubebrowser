@@ -8,4 +8,5 @@ typedef uint8_t u8;  typedef uint16_t u16; typedef uint32_t u32; typedef uint64_
 typedef int8_t s8;   typedef int16_t s16; typedef int32_t s32; typedef int64_t s64;
 typedef float f32;
 typedef struct { u32 val[8]; } GXTexObj;
+typedef struct GXRModeObj GXRModeObj;
 static inline void DCFlushRange(void *p, u32 n) { (void)p; (void)n; }
