@@ -20,6 +20,35 @@ static int cur_mode = -1;     /* 0 = color, 1 = text, 2 = image */
 static bool tex_invalidate;
 static int cur_font = -1;
 static GXTexObj font_tex[FONT_COUNT];
+static u8 chrome_data[SYS_FONTSIZE_ANSI] ATTRIBUTE_ALIGN(32);
+static FontGlyph chrome_glyphs[95];
+static bool chrome_ready;
+static float chrome_height, chrome_width, chrome_tex_height;
+static float corner_cos[28], corner_sin[28], circle_cos[25], circle_sin[25];
+
+static void chrome_init(void) {
+    sys_fontheader *header = (sys_fontheader *)chrome_data;
+    SYS_SetFontEncoding(SYS_FONTENC_ANSI);
+    if (!SYS_InitFont(header) || !header->cell_height || header->cell_height > 64 ||
+        !header->sheet_width || !header->sheet_height || header->sheet_width > 1024 || header->sheet_height > 1024) return;
+    void *atlas = NULL;
+    for (int c = 32; c <= 126; c++) {
+        void *sheet; int x, y, width;
+        SYS_GetFontTexture(c, &sheet, &x, &y, &width);
+        if (!sheet || (atlas && atlas != sheet) || width < 0 || width > 64) return;
+        atlas = sheet;
+        FontGlyph *g = &chrome_glyphs[c - 32];
+        g->x = x; g->y = y; g->w = width; g->h = header->cell_height;
+        g->xoff = g->yoff = 0; g->adv = SYS_GetFontWidth(c) - 1;
+    }
+    DCFlushRange(chrome_data, sizeof(chrome_data));
+    GX_InitTexObj(&font_tex[FONT_CHROME], atlas, header->sheet_width, header->sheet_height,
+                  header->sheet_format, GX_CLAMP, GX_CLAMP, GX_FALSE);
+    GX_InitTexObjLOD(&font_tex[FONT_CHROME], GX_LINEAR, GX_LINEAR, 0, 0, 0, GX_FALSE, GX_FALSE, GX_ANISO_1);
+    chrome_height = header->cell_height;
+    chrome_width = header->sheet_width; chrome_tex_height = header->sheet_height;
+    chrome_ready = true;
+}
 
 Color color_alpha(Color c, float mul) {
     float a = c.a * mul;
@@ -108,13 +137,23 @@ void gfx_init(int video_mode, bool widescreen) {
     GX_SetColorUpdate(GX_TRUE);
     GX_SetNumTevStages(1);
 
-    const unsigned char *texdata[FONT_COUNT] = { font_ui_tex, font_body_tex, font_italic_tex, font_mono_tex };
-    const u32 texsize[FONT_COUNT] = { sizeof(font_ui_tex), sizeof(font_body_tex), sizeof(font_italic_tex),
+    const unsigned char *texdata[FONT_CHROME] = { font_ui_tex, font_body_tex, font_italic_tex, font_mono_tex };
+    const u32 texsize[FONT_CHROME] = { sizeof(font_ui_tex), sizeof(font_body_tex), sizeof(font_italic_tex),
                                       sizeof(font_mono_tex) };
-    for (int i = 0; i < FONT_COUNT; i++) {
+    for (int i = 0; i < FONT_CHROME; i++) {
         DCFlushRange((void *)texdata[i], texsize[i]);
         GX_InitTexObj(&font_tex[i], (void *)texdata[i], FONT_TEX_W, FONT_TEX_H, GX_TF_I4, GX_CLAMP, GX_CLAMP, GX_FALSE);
         GX_InitTexObjLOD(&font_tex[i], GX_LINEAR, GX_LINEAR, 0.0f, 0.0f, 0.0f, GX_FALSE, GX_FALSE, GX_ANISO_1);
+    }
+    font_tex[FONT_CHROME] = font_tex[FONT_UI];
+    chrome_init();
+    for (int c = 0; c < 4; c++) for (int i = 0; i <= 6; i++) {
+        float a = (-90.0f + 90.0f * c + 90.0f * i / 6) * (float)M_PI / 180;
+        corner_cos[c*7+i] = cosf(a); corner_sin[c*7+i] = sinf(a);
+    }
+    for (int i = 0; i <= 24; i++) {
+        float a = 2 * (float)M_PI * i / 24;
+        circle_cos[i] = cosf(a); circle_sin[i] = sinf(a);
     }
     GX_InvalidateTexAll();
     GX_InvVtxCache();
@@ -300,11 +339,9 @@ static int rr_points(float x, float y, float w, float h, float r, float *px, flo
     const float cy[4] = { y + r, y + h - r, y + h - r, y + r };
     int n = 0;
     for (int c = 0; c < 4; c++) {
-        float a0 = (-90.0f + 90.0f * c) * (float)M_PI / 180.0f;
         for (int i = 0; i <= RR_SEG; i++) {
-            float a = a0 + (float)M_PI * 0.5f * i / RR_SEG;
-            px[n] = cx[c] + cosf(a) * r;
-            py[n] = cy[c] + sinf(a) * r;
+            px[n] = cx[c] + corner_cos[c*7+i] * r;
+            py[n] = cy[c] + corner_sin[c*7+i] * r;
             n++;
         }
     }
@@ -322,6 +359,18 @@ void gfx_rrect_vgrad(float x, float y, float w, float h, float r, Color top, Col
         int k = i % n;
         vtx(px[k], py[k], color_lerp(top, bottom, (py[k] - y) / h));
     }
+    GX_End();
+}
+
+void gfx_cut_rect(float x, float y, float w, float h, float cut, Color c) {
+    if (!(w > 0) || !(h > 0)) return;
+    cut = fminf(cut, fminf(w, h) * .5f);
+    const float px[] = {x+cut,x+w-cut,x+w,x+w,x+w-cut,x+cut,x,x};
+    const float py[] = {y,y,y+cut,y+h-cut,y+h,y+h,y+h-cut,y+cut};
+    mode_color();
+    GX_Begin(GX_TRIANGLEFAN, GX_VTXFMT0, 10);
+    vtx(x+w*.5f,y+h*.5f,c);
+    for (int i=0;i<=8;i++) vtx(px[i%8],py[i%8],c);
     GX_End();
 }
 
@@ -355,8 +404,7 @@ void gfx_circle(float cx, float cy, float r, Color c) {
     GX_Begin(GX_TRIANGLEFAN, GX_VTXFMT0, N + 2);
     vtx(cx, cy, c);
     for (int i = 0; i <= N; i++) {
-        float a = 2.0f * (float)M_PI * i / N;
-        vtx(cx + cosf(a) * r, cy + sinf(a) * r, c);
+        vtx(cx + circle_cos[i] * r, cy + circle_sin[i] * r, c);
     }
     GX_End();
 }
@@ -440,6 +488,7 @@ void gfx_cube(float cx, float cy, float size, float rx, float ry, Color base) {
 
 static const FontGlyph *glyph_table(FontId f) {
     switch (f) {
+    case FONT_CHROME: return chrome_ready ? chrome_glyphs : font_ui_glyphs;
     case FONT_UI: return font_ui_glyphs;
     case FONT_ITALIC: return font_italic_glyphs;
     case FONT_MONO: return font_mono_glyphs;
@@ -448,6 +497,7 @@ static const FontGlyph *glyph_table(FontId f) {
 }
 static float font_px(FontId f) {
     switch (f) {
+    case FONT_CHROME: return chrome_ready ? chrome_height : FONT_UI_PX;
     case FONT_UI: return FONT_UI_PX;
     case FONT_ITALIC: return FONT_ITALIC_PX;
     case FONT_MONO: return FONT_MONO_PX;
@@ -456,6 +506,7 @@ static float font_px(FontId f) {
 }
 static float font_line(FontId f) {
     switch (f) {
+    case FONT_CHROME: return chrome_ready ? chrome_height : FONT_UI_LINE;
     case FONT_UI: return FONT_UI_LINE;
     case FONT_ITALIC: return FONT_ITALIC_LINE;
     case FONT_MONO: return FONT_MONO_LINE;
@@ -502,7 +553,8 @@ float gfx_text(FontId f, float size, float x, float y, Color c, const char *s, i
     float cx = x;
     if (n > 0) {
         mode_text(f);
-        const float iw = 1.0f / FONT_TEX_W, ih = 1.0f / FONT_TEX_H;
+        const float iw = 1.0f / (f == FONT_CHROME && chrome_ready ? chrome_width : FONT_TEX_W);
+        const float ih = 1.0f / (f == FONT_CHROME && chrome_ready ? chrome_tex_height : FONT_TEX_H);
         GX_Begin(GX_QUADS, GX_VTXFMT0, n * 4);
         for (int i = 0; i < len; i++) {
             const FontGlyph *g = glyph_for(G, (unsigned char)s[i]);

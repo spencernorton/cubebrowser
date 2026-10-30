@@ -1,3 +1,30 @@
+## 2026-10-29 — Native Indigo chrome and launch preferences
+
+Replace glossy widgets and drifting cubes with dark cut-corner panels,
+restrained focus rows, an IPL chrome font and a compact menu. Pages retain
+independent fonts and author colours. The top-left Indigo control keeps the
+existing return stub; X and Y keep their address and bookmark shortcuts.
+Settings opens on browsing and inherited controls are hidden. The new default
+home is the lightweight public Indigo start page; a saved home stays set.
+
+Version 1 named launch arguments carry colour, screen shape, video, motion,
+sound, rumble, active UTC offset and supported config-card origin. Capture
+standalone settings before applying context and restore inherited fields only
+when serializing, including after an explicit reset. Keep sd=0 and opt-in lab
+semantics. Any of four neutral-armed pads can own the complete input sample;
+stop rumble on handover/unplug. Steady time drives pointer, scroll and repeat.
+Cache rounded geometry once and wake the network worker with a semaphore
+instead of polling. Publish job state atomically and set save policy before
+waking the worker.
+
+Eight sanitizer host suites pass, including actual input timing and launch
+persistence. The pinned SDK builds. The extended local Dolphin route passes
+PAL widescreen from controller port 4, including Settings and address entry;
+NTSC and exact-head CI qualification are completed before integration. Real
+adapter/cable and return qualification remain pending while the console is
+unreachable. Do not infer a hardware pass or a stable release from emulator
+coverage.
+
 ## 2026-10-29 — Bound the visible page working set
 
 Index layout spans for drawing, hit targets and nearby image scheduling while

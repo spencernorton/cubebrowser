@@ -27,6 +27,8 @@
 #include <time.h>
 #include <ogc/lwp_watchdog.h>
 
+#define BROWSER_BAR 42
+#define BROWSER_FOOT 42
 #define HIST_MAX 32
 #define BOOKMARK_MAX 64
 #define BOOKMARK_FILE STORAGE_DIR "/bookmarks.txt"
@@ -60,7 +62,8 @@ static int refresh_generation = -1;
 static u64 refresh_at;
 static Bookmark bookmarks[BOOKMARK_MAX];
 static int nbookmarks;
-static bool bm_open;
+static bool bm_open, menu_open;
+static float menu_cursor_x, menu_cursor_y;
 static int bm_scroll;
 static int confirm_delete = -1;
 static int select_field = -1, select_generation, select_count, select_scroll, select_current;
@@ -71,26 +74,17 @@ static char queued_url[URL_MAX];
 static char *queued_post;
 
 static const char home_html[] =
-    "<title>Start</title>"
-    "<h1>Welcome to CubeBrowser</h1>"
-    "<p>Press <b>X</b> to type an address or search. Point with the Control Stick and press <b>A</b> "
-    "to follow links. The <b>D-Pad</b> jumps between links, and the <b>C-Stick</b> scrolls.</p>"
-    "<h3>Light sites that work well</h3><ul>"
-    "<li><a href=\"https://lite.duckduckgo.com/lite/\">DuckDuckGo Lite</a> - search</li>"
-    "<li><a href=\"https://en.m.wikipedia.org/wiki/GameCube\">Wikipedia (mobile)</a> - encyclopedia</li>"
-    "<li><a href=\"https://text.npr.org/\">NPR Text</a> - news</li>"
-    "<li><a href=\"https://lite.cnn.com/\">CNN Lite</a> - news</li>"
-    "<li><a href=\"http://68k.news/\">68k.news</a> - headlines made for vintage computers</li>"
-    "<li><a href=\"http://frogfind.com/\">FrogFind</a> - search that simplifies pages</li>"
-    "<li><a href=\"https://wiby.me/\">Wiby</a> - a search engine for classic web pages</li>"
-    "</ul><p><a href=\"about:help\">Controls and tips</a></p>";
+    "<title>Indigo Web</title><h1>Indigo Web</h1>"
+    "<p>Press <b>X</b> for an address or search, <b>Y</b> for bookmarks, or <b>START</b> for the browser menu.</p>"
+    "<p><a href=\"https://norvitech.com/indigo/start/\">Open the Indigo Web start page</a></p>"
+    "<p><a href=\"about:help\">Offline controls and help</a></p>";
 
 static const char help_html[] =
     "<title>Controls</title><h1>Controls</h1><ul>"
     "<li><b>Control Stick</b> - move the pointer (hold Z for fine control)</li>"
     "<li><b>A</b> - click</li><li><b>B</b> - back</li>"
     "<li><b>X</b> - type an address or search</li><li><b>Y</b> - bookmarks</li>"
-    "<li><b>START</b> - settings</li><li><b>C-Stick</b> - scroll</li>"
+    "<li><b>START</b> - browser menu</li><li><b>C-Stick</b> - scroll</li>"
     "<li><b>L / R</b> - page up / page down</li>"
     "<li><b>D-Pad</b> - jump between links and buttons</li>"
     "<li><b>Hold Z + A</b> on a link - save it to the SD card instead of opening it</li></ul>"
@@ -562,9 +556,9 @@ static void draw_download(bool interactive) {
     case DL_UNZIPPED: title = "Unzipped"; break;
     case DL_UNZIP_FAILED: title = "Couldn't unzip"; break;
     }
-    gfx_text(FONT_UI, 24, px + 24, py + 16, t->text, title, -1);
+    gfx_text(FONT_CHROME, 24, px + 24, py + 16, t->text, title, -1);
     float tx = px + 24, ty = py + 58, tw = pw - 48;
-    gfx_text(FONT_UI, 18, tx, ty, t->text, dl_name, gfx_text_fit(FONT_UI, 18, dl_name, -1, tw));
+    gfx_text(FONT_CHROME, 18, tx, ty, t->text, dl_name, gfx_text_fit(FONT_CHROME, 18, dl_name, -1, tw));
     ty += 32;
     float by = py + ph - 58, bh = 40;
     bool close = false;
@@ -572,9 +566,9 @@ static void draw_download(bool interactive) {
     if (dl_state == DL_OFFER) {
         fmt_size(dl_size, a, sizeof(a));
         snprintf(line, sizeof(line), "Size: %s", a);
-        gfx_text(FONT_BODY, 17, tx, ty, t->text_dim, line, -1);
+        gfx_text(FONT_CHROME, 17, tx, ty, t->text_dim, line, -1);
         snprintf(line, sizeof(line), "Saves to: %s", g_set.dl_folder);
-        gfx_text(FONT_BODY, 17, tx, ty + 26, t->text_dim, line, gfx_text_fit(FONT_BODY, 17, line, -1, tw));
+        gfx_text(FONT_CHROME, 17, tx, ty + 26, t->text_dim, line, gfx_text_fit(FONT_CHROME, 17, line, -1, tw));
         if (dl_size > 200LL * 1024 * 1024)
             wrap_text(FONT_BODY, 16, tx, ty + 58, tw, t->text_dim, "This is a big file, so it may take a while. Keep the GameCube on until it finishes.", 2);
         int nb = dl_is_zip ? 3 : 2;
@@ -600,22 +594,22 @@ static void draw_download(bool interactive) {
             }
             if (total > 0) snprintf(line, sizeof(line), "%s of %s   %s", a, b, speed);
             else snprintf(line, sizeof(line), "%s   %s", a, speed);
-            gfx_text(FONT_BODY, 17, tx, ty, t->text, line, -1);
+            gfx_text(FONT_CHROME, 17, tx, ty, t->text, line, -1);
             if (total > 0 && pg->speed > 0) {
                 long long left = (total - done) / pg->speed;
                 if (left >= 3600) snprintf(line, sizeof(line), "About %lld hr %lld min left", left / 3600, (left % 3600) / 60);
                 else if (left >= 60) snprintf(line, sizeof(line), "About %lld min left", left / 60 + 1);
                 else snprintf(line, sizeof(line), "Less than a minute left");
-                gfx_text(FONT_BODY, 17, tx, ty + 26, t->text_dim, line, -1);
+                gfx_text(FONT_CHROME, 17, tx, ty + 26, t->text_dim, line, -1);
             } else if (pg->resumed) {
-                gfx_text(FONT_BODY, 17, tx, ty + 26, t->text_dim, "Continuing where it stopped before", -1);
+                gfx_text(FONT_CHROME, 17, tx, ty + 26, t->text_dim, "Continuing where it stopped before", -1);
             }
         } else {
             const UnzipProgress *up = fetch_unzip_progress();
             done = (long long)up->done; total = (long long)up->total;
             snprintf(line, sizeof(line), "File %d of %d: %s", up->files_done + 1 > up->files_total ? up->files_total : up->files_done + 1,
                      up->files_total, up->current);
-            gfx_text(FONT_BODY, 17, tx, ty, t->text, line, gfx_text_fit(FONT_BODY, 17, line, -1, tw));
+            gfx_text(FONT_CHROME, 17, tx, ty, t->text, line, gfx_text_fit(FONT_CHROME, 17, line, -1, tw));
         }
         /* progress bar (an animated stripe when the size isn't known) */
         float bar_y = ty + 62;
@@ -625,7 +619,7 @@ static void draw_download(bool interactive) {
             if (frac > 1) frac = 1;
             gfx_rrect_vgrad(tx, bar_y, fmaxf(18, tw * frac), 18, 9, t->accent_hi, t->accent);
             snprintf(line, sizeof(line), "%d%%", (int)(frac * 100));
-            gfx_text_centered(FONT_UI, 14, tx + tw * 0.5f, bar_y + 1, t->text, line);
+            gfx_text_centered(FONT_CHROME, 14, tx + tw * 0.5f, bar_y + 1, t->text, line);
         } else {
             float k = fmodf(ui_time() * 0.6f, 1.0f);
             gfx_rrect(tx + (tw - 80) * k, bar_y, 80, 18, 9, t->accent);
@@ -638,7 +632,7 @@ static void draw_download(bool interactive) {
         }
     } else if (dl_state == DL_DONE) {
         snprintf(line, sizeof(line), "Saved to %s", dl_path);
-        wrap_text(FONT_BODY, 17, tx, ty, tw, t->text_dim, line, 2);
+        wrap_text(FONT_CHROME, 17, tx, ty, tw, t->text_dim, line, 2);
         wrap_text(FONT_BODY, 16, tx, ty + 56, tw, t->text_dim, "You can open it from Swiss after leaving the browser.", 2);
         float bw = dl_is_zip ? (tw - 12) / 2 : tw * 0.5f, bx = dl_is_zip ? tx : tx + tw * 0.25f;
         if (dl_is_zip) {
@@ -648,10 +642,10 @@ static void draw_download(bool interactive) {
         if (ui_button(ui_id("dl-done", 1), bx, by, bw, bh, "OK", 17, UIB_ACCENT)) close = true;
     } else if (dl_state == DL_UNZIPPED) {
         snprintf(line, sizeof(line), "%d file%s extracted to %s", dl_files, dl_files == 1 ? "" : "s", dl_unzip_dir);
-        wrap_text(FONT_BODY, 17, tx, ty, tw, t->text_dim, line, 3);
+        wrap_text(FONT_CHROME, 17, tx, ty, tw, t->text_dim, line, 3);
         if (ui_button(ui_id("dl-uz", 0), tx + tw * 0.25f, by, tw * 0.5f, bh, "OK", 17, UIB_ACCENT)) close = true;
     } else {   /* failed */
-        wrap_text(FONT_BODY, 17, tx, ty, tw, t->text, dl_msg, 3);
+        wrap_text(FONT_CHROME, 17, tx, ty, tw, t->text, dl_msg, 3);
         if (dl_state == DL_FAILED) {
             float bw = (tw - 12) / 2;
             if (ui_button(ui_id("dl-fail", 0), tx, by, bw, bh, "Retry", 17, UIB_ACCENT)) start_download();
@@ -907,7 +901,7 @@ static void draw_bookmarks(bool interactive) {
     ui_set_input(interactive);
     ui_panel(px, py, pw, ph, 20);
     ui_draw_icon(ICON_STAR, px + 30, py + 28, 26, t->accent);
-    gfx_text(FONT_UI, 24, px + 50, py + 12, t->text, "Bookmarks", -1);
+    gfx_text(FONT_CHROME, 24, px + 50, py + 12, t->text, "Bookmarks", -1);
     if (ui_icon_button(ui_id("bm-close", 0), px + pw - 30, py + 28, 16, ICON_CLOSE, true)) {
         bm_open = false;
         sound_play(SFX_CLOSE);
@@ -918,7 +912,7 @@ static void draw_bookmarks(bool interactive) {
     const int visible = 6;
     float row_h = 38, ly = py + 108;
     if (nbookmarks == 0)
-        gfx_text_centered(FONT_UI, 17, px + pw * 0.5f, ly + 60, t->text_dim, "No bookmarks yet.");
+        gfx_text_centered(FONT_CHROME, 17, px + pw * 0.5f, ly + 60, t->text_dim, "No bookmarks yet.");
     int dir = ui_dpad_unhandled();
     float sd = input_scroll_delta();
     if ((dir == DIR_DOWN || sd > 20) && bm_scroll + visible < nbookmarks) bm_scroll++;
@@ -948,7 +942,7 @@ static void draw_bookmarks(bool interactive) {
     if (nbookmarks > visible) {
         char more[48];
         snprintf(more, sizeof(more), "%d-%d of %d", bm_scroll + 1, bm_scroll + visible, nbookmarks);
-        gfx_text_centered(FONT_UI, 14, px + pw * 0.5f, py + ph - 26, t->text_dim, more);
+        gfx_text_centered(FONT_CHROME, 14, px + pw * 0.5f, py + ph - 26, t->text_dim, more);
     }
 }
 
@@ -960,8 +954,48 @@ static void draw_clock(float right_x, float y) {
     char buf[16];
     int h12 = tmv.tm_hour % 12;
     snprintf(buf, sizeof(buf), "%d:%02d %s", h12 ? h12 : 12, tmv.tm_min, tmv.tm_hour < 12 ? "AM" : "PM");
-    float w = gfx_text_width(FONT_UI, 15, buf, -1);
-    gfx_text(FONT_UI, 15, right_x - w, y, t->text, buf, -1);
+    float w = gfx_text_width(FONT_CHROME, 15, buf, -1);
+    gfx_text(FONT_CHROME, 15, right_x - w, y, t->text, buf, -1);
+}
+
+static void open_menu(void) {
+    float sx, sy, sw, sh;
+    ui_safe_area(&sx,&sy,&sw,&sh);
+    menu_cursor_x=input_cursor_x(); menu_cursor_y=input_cursor_y();
+    menu_open=true;
+    input_set_cursor(sx+(sw-fminf(440,sw-24))*.5f+42, sy+(sh-346)*.5f+75);
+}
+
+static void draw_menu(bool interactive) {
+    const Theme *t = theme();
+    float sx, sy, sw, sh;
+    ui_safe_area(&sx, &sy, &sw, &sh);
+    float w = fminf(440, sw-24), h = 346, x = sx+(sw-w)*.5f, y = sy+(sh-h)*.5f;
+    gfx_rect(0, 0, gfx_width(), 480, rgba(0,0,0,180));
+    ui_panel(x,y,w,h,0);
+    gfx_text(FONT_CHROME,22,x+22,y+17,t->text,"Indigo Web",-1);
+    ui_set_input(interactive);
+    static const char *const rows[] = {"Home page", "Forward", "Reload / Stop", "Add bookmark", "Browser settings", "Return to Indigo"};
+    for (int i=0;i<6;i++) {
+        if (!ui_button(ui_id("web-menu",i),x+18,y+56+i*44,w-36,38,rows[i],18,UIB_NORMAL)) continue;
+        menu_open = false;
+        switch (i) {
+        case 0: browser_navigate(g_set.home); break;
+        case 1: go_forward(); break;
+        case 2:
+            automatic_hops = 0;
+            if (loading) { queued = false; fetch_cancel(); }
+            else if (has_page) { restore_scroll = page.scroll_target; start_load(page.url, NULL); }
+            break;
+        case 3: if (has_page) bookmark_add_current(); break;
+        case 4: settings_request = true; break;
+        case 5: app_request_quit(); break;
+        }
+    }
+    if (interactive && (input_pressed(ACT_BACK) || input_pressed(ACT_MENU))) {
+        input_consume(ACT_BACK); input_consume(ACT_MENU); menu_open=false;
+        input_set_cursor(menu_cursor_x,menu_cursor_y); sound_play(SFX_CLOSE);
+    }
 }
 
 static void draw_select(bool interactive) {
@@ -973,7 +1007,7 @@ static void draw_select(bool interactive) {
     gfx_rect(0, 0, gfx_width(), 480, color_alpha(t->shadow, 0.8f));
     ui_set_input(interactive);
     ui_panel(x, y, width, height, 14);
-    gfx_text(FONT_UI, 22, x + 20, y + 14, t->text, "Choose an option", -1);
+    gfx_text(FONT_CHROME, 22, x + 20, y + 14, t->text, "Choose an option", -1);
     if (ui_icon_button(ui_id("select-close", 0), x + width - 28, y + 28, 16, ICON_CLOSE, true)) select_field = -1;
     const int rows = 6;
     if (interactive) {
@@ -1017,7 +1051,7 @@ void browser_update(void) {
     }
     float sx, sy, sw, sh;
     ui_safe_area(&sx, &sy, &sw, &sh);
-    float cw = sw - 16, ch = sh - 54 - 16 - 34;
+    float cw = sw - 16, ch = sh - BROWSER_BAR - 12 - BROWSER_FOOT;
     float scale = g_set.text_size / 100.0f;
     static int last_layout_frame, last_load_images = -1, last_alt = -1, last_img_size = -1;
     if (last_load_images != g_set.load_images || last_alt != g_set.show_alt || last_img_size != g_set.img_size) {
@@ -1042,7 +1076,7 @@ void browser_update(void) {
         if (max_scroll < 0) max_scroll = 0;
         if (page.scroll_target > max_scroll) page.scroll_target = max_scroll;
         if (page.scroll_target < 0) page.scroll_target = 0;
-        page.scroll += (page.scroll_target - page.scroll) * (g_set.animations ? 0.3f : 1.0f);
+        page.scroll += (page.scroll_target - page.scroll) * (g_set.animations ? fminf(1, 0.3f * input_delta_seconds() * 60) : 1.0f);
         schedule_images(page.scroll, ch, fminf(cw - 32, 640));
     }
 }
@@ -1055,37 +1089,27 @@ bool browser_take_settings_request(void) {
 
 void browser_frame(bool interactive) {
     const Theme *t = theme();
-    bool modal = osk_active() || bm_open || dl_state != DL_IDLE || select_field >= 0;
+    bool modal = osk_active() || bm_open || dl_state != DL_IDLE || select_field >= 0 || menu_open;
 
     float sx, sy, sw, sh;
     ui_safe_area(&sx, &sy, &sw, &sh);
     ui_set_input(interactive && !modal);
     bool input_ok = interactive && !modal;
 
-    /* ---- toolbar */
-    float bar_h = 54;
-    ui_panel(sx + 4, sy + 4, sw - 8, bar_h, 24);
-    float by = sy + 4 + bar_h * 0.5f, r = 18;
-    float bx = sx + 30;
-    if (ui_icon_button(ui_id("tb", 0), bx, by, r, ICON_BACK, nback > 0)) go_back();
-    if (ui_icon_button(ui_id("tb", 1), bx + 44, by, r, ICON_FORWARD, nfwd > 0)) go_forward();
-    if (ui_icon_button(ui_id("tb", 2), bx + 88, by, r, loading ? ICON_STOP : ICON_RELOAD, true)) {
-        automatic_hops = 0;
-        if (loading) { queued = false; fetch_cancel(); }
-        else if (has_page) { restore_scroll = page.scroll_target; start_load(page.url, NULL); }
+    /* ---- native toolbar */
+    float bar_h = BROWSER_BAR;
+    ui_panel(sx+4, sy+4, sw-8, bar_h, 0);
+    float by = sy+4+bar_h*.5f;
+    if (ui_button(ui_id("return-indigo", 0), sx+10, sy+9, 94, 32, "< Indigo", 17, UIB_FLAT)) app_request_quit();
+    float right = sx+sw-30;
+    if (ui_icon_button(ui_id("tb", 5), right, by, 16, ICON_GEAR, true)) open_menu();
+    if (ui_icon_button(ui_id("tb", 4), right-40, by, 16, ICON_STAR, true)) {
+        bm_open = true; bm_scroll = 0; confirm_delete = -1; sound_play(SFX_OPEN);
     }
-    if (ui_icon_button(ui_id("tb", 3), bx + 132, by, r, ICON_HOME, true)) browser_navigate(g_set.home);
-    float right = sx + sw - 30;
-    if (ui_icon_button(ui_id("tb", 5), right, by, r, ICON_GEAR, true)) settings_request = true;
-    if (ui_icon_button(ui_id("tb", 4), right - 44, by, r, ICON_STAR, true)) { bm_open = true; bm_scroll = 0; confirm_delete = -1; sound_play(SFX_OPEN); }
-
-    /* address field */
-    float ax = bx + 160, aw = (right - 70) - ax, ah = 34, ay = by - ah * 0.5f;
+    float ax = sx+112, aw = right-66-ax, ah = 32, ay = by-ah*.5f;
     bool addr_hover = ui_hover(ui_id("addr", 0), ax, ay, aw, ah);
-    float ahv = ui_anim(ui_id("addr", 1), addr_hover ? 1.0f : 0.0f, 0.25f);
-    if (ahv > 0.01f) gfx_rrect(ax - 4, ay - 4, aw + 8, ah + 8, 21, color_alpha(t->accent, 0.45f * ahv));
-    gfx_rrect(ax, ay, aw, ah, 17, t->field_bg);
-    gfx_rrect_outline(ax, ay, aw, ah, 17, 1.5f, t->panel_edge);
+    gfx_cut_rect(ax, ay, aw, ah, 3, addr_hover ? t->accent : t->panel_edge);
+    gfx_cut_rect(ax+1, ay+1, aw-2, ah-2, 2, t->field_bg);
     const char *shown = loading ? loading_url : (has_page ? page.url : "");
     float tx = ax + 14;
     if (!loading && has_page && page.secure) {
@@ -1093,8 +1117,8 @@ void browser_frame(bool interactive) {
         tx += 18;
     }
     gfx_set_clip(tx, ay, aw - (tx - ax) - 12, ah);
-    int n = gfx_text_fit(FONT_BODY, 17, shown, -1, aw - (tx - ax) - 16);
-    gfx_text(FONT_BODY, 17, tx, ay + 7, t->field_text, shown, n);
+    int n = gfx_text_fit(FONT_CHROME, 17, shown, -1, aw - (tx - ax) - 16);
+    gfx_text(FONT_CHROME, 17, tx, ay + 7, t->field_text, shown, n);
     gfx_clear_clip();
     if (addr_hover && input_ok && input_pressed(ACT_CLICK)) {
         input_consume(ACT_CLICK);
@@ -1103,9 +1127,8 @@ void browser_frame(bool interactive) {
     }
 
     /* ---- content area */
-    float cx = sx + 8, cy = sy + bar_h + 16, cw = sw - 16, ch = sh - bar_h - 16 - 34;
-    gfx_shadow(cx + 2, cy + 4, cw, ch, 14, 6, t->shadow);
-    gfx_rrect(cx, cy, cw, ch, 14, has_page && page.dom ? page.bg : t->page_bg);
+    float cx = sx + 8, cy = sy + bar_h + 12, cw = sw - 16, ch = sh - bar_h - 12 - BROWSER_FOOT;
+    gfx_rect(cx, cy, cw, ch, has_page && page.dom ? page.bg : t->page_bg);
 
     int hover_link = -1, hover_field = -1;
     if (has_page) {
@@ -1178,13 +1201,8 @@ void browser_frame(bool interactive) {
     }
 
     /* ---- status bar */
-    float sbx = sx + 14, sby = sy + sh - 28;
-    const float return_w = 152;
-    if (ui_button(ui_id("return-indigo", 0), sbx, sby - 5, return_w, 30,
-                  "Return to Indigo", 16, UIB_NORMAL)) {
-        app_request_quit();
-    }
-    sbx += return_w + 12;
+    float sbx = sx+14, sby = sy+sh-39;
+    gfx_rect(sx+8, sby-5, sw-16, 1, t->panel_edge);
     char status[300];
     if (loading) {
         int kb = fetch_progress() / 1024;
@@ -1207,12 +1225,14 @@ void browser_frame(bool interactive) {
     } else {
         snprintf(status, sizeof(status), "%s", has_page && page.title[0] ? page.title : "Ready");
     }
-    float status_w = sw - 150 - (sbx - sx);
-    int sn = gfx_text_fit(FONT_UI, 15, status, -1, status_w);
-    gfx_text(FONT_UI, 15, sbx, sby, t->text, status, sn);
+    float status_w = sw - 140 - (sbx - sx);
+    int sn = gfx_text_fit(FONT_CHROME, 15, status, -1, status_w);
+    gfx_text(FONT_CHROME, 15, sbx, sby, t->text, status, sn);
     Color dot = netio_state() == NET_UP ? t->good : (netio_state() == NET_FAILED ? t->bad : t->accent);
     gfx_circle(sx + sw - 110, sby + 10, 5, dot);
     draw_clock(sx + sw - 14, sby);
+    const char *hints = "A: Open   B: Back   X: Address   Y: Bookmarks   START: Menu";
+    gfx_text(FONT_CHROME, 16, sx+14, sby+22, t->text_dim, hints, gfx_text_fit(FONT_CHROME, 16, hints, -1, sw-28));
 
     /* ---- shortcuts */
     if (input_ok) {
@@ -1223,10 +1243,11 @@ void browser_frame(bool interactive) {
             bm_open = true; bm_scroll = 0; confirm_delete = -1;
             sound_play(SFX_OPEN);
         }
-        if (input_pressed(ACT_MENU)) { input_consume(ACT_MENU); settings_request = true; }
+        if (input_pressed(ACT_MENU)) { input_consume(ACT_MENU); open_menu(); }
     }
 
     /* ---- modal layers */
+    if (menu_open) draw_menu(interactive && !osk_active());
     if (select_field >= 0) draw_select(interactive && !osk_active());
     if (dl_state != DL_IDLE) draw_download(interactive && !osk_active());
     if (bm_open) {

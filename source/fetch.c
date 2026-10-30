@@ -4,6 +4,8 @@
 #include "conn.h"
 #include "diag.h"
 #include <gccore.h>
+#include <ogc/semaphore.h>
+#include <stdatomic.h>
 #include <unistd.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -22,16 +24,19 @@ static bool strcasestr_s(const char *h, const char *n) {
 #define MAX_SRC_PIXELS (1600L * 1000L)
 
 static lwp_t worker;
-static volatile FetchState state = FETCH_IDLE;
+static _Atomic FetchState state = FETCH_IDLE;
 static volatile JobKind kind;
-static volatile int job_pending, cancel_flag, progress, retry_net;
+static _Atomic int job_pending, retry_net;
+static volatile int cancel_flag, progress;
+static sem_t wake;
+static bool worker_ready;
 static char job_url[URL_MAX];
 static char *job_post;
 static int job_max_w, job_max_h, job_tag;
 static HttpResult result;
 static ImageResult img_result;
 static char stage_buf[192] = "";
-static volatile bool net_ready;
+static _Atomic bool net_ready;
 static char task_path[600], task_dest[600];
 static DownloadProgress dl_progress;
 static UnzipProgress uz_progress;
@@ -134,24 +139,24 @@ static void *worker_main(void *arg) {
             state = FETCH_DONE;
             diag_note(DIAG_WORKER, "idle");
         }
-        usleep(10000);
+        LWP_SemWait(wake);
     }
     return NULL;
 }
 
 void fetch_init(void) {
-    LWP_CreateThread(&worker, worker_main, NULL, NULL, WORKER_STACK, WORKER_PRIO);
+    worker_ready = LWP_SemInit(&wake, 0, 1) >= 0 &&
+        LWP_CreateThread(&worker, worker_main, NULL, NULL, WORKER_STACK, WORKER_PRIO) >= 0;
+    if (!worker_ready) set_stage("Not enough memory for the network worker.");
 }
 
-bool fetch_start_save(const char *url) {
-    if (!fetch_start(url, NULL)) return false;
-    job_force_save = true;
-    return true;
-}
+static bool start_page(const char *url, const char *post_body, bool force_save);
+bool fetch_start_save(const char *url) { return start_page(url, NULL, true); }
+bool fetch_start(const char *url, const char *post_body) { return start_page(url, post_body, false); }
 
-bool fetch_start(const char *url, const char *post_body) {
-    if (state != FETCH_IDLE) return false;
-    job_force_save = false;
+static bool start_page(const char *url, const char *post_body, bool force_save) {
+    if (!worker_ready || state != FETCH_IDLE) return false;
+    job_force_save = force_save;
     snprintf(job_url, sizeof(job_url), "%s", url);
     job_post = post_body ? strdup(post_body) : NULL;
     kind = JOB_PAGE;
@@ -160,11 +165,12 @@ bool fetch_start(const char *url, const char *post_body) {
     set_stage("Starting...");
     state = FETCH_BUSY;
     job_pending = 1;
+    LWP_SemPost(wake);
     return true;
 }
 
 bool fetch_start_image(const char *url, int max_w, int max_h, int tag) {
-    if (state != FETCH_IDLE || !net_ready) return false;
+    if (!worker_ready || state != FETCH_IDLE || !net_ready) return false;
     if (strlen(url) >= sizeof(job_url)) return false;
     snprintf(job_url, sizeof(job_url), "%s", url);
     job_post = NULL;
@@ -176,11 +182,12 @@ bool fetch_start_image(const char *url, int max_w, int max_h, int tag) {
     progress = 0;
     state = FETCH_BUSY;
     job_pending = 1;
+    LWP_SemPost(wake);
     return true;
 }
 
 bool fetch_start_css(const char *url, int tag) {
-    if (state != FETCH_IDLE || !net_ready || strlen(url) >= sizeof(job_url)) return false;
+    if (!worker_ready || state != FETCH_IDLE || !net_ready || strlen(url) >= sizeof(job_url)) return false;
     snprintf(job_url, sizeof(job_url), "%s", url);
     job_post = NULL;
     job_tag = tag;
@@ -189,6 +196,7 @@ bool fetch_start_css(const char *url, int tag) {
     progress = 0;
     state = FETCH_BUSY;
     job_pending = 1;
+    LWP_SemPost(wake);
     return true;
 }
 
@@ -209,11 +217,12 @@ static bool start_task(int k) {
     progress = 0;
     state = FETCH_BUSY;
     job_pending = 1;
+    LWP_SemPost(wake);
     return true;
 }
 
 bool fetch_start_download(const char *url, const char *dest_path) {
-    if (state != FETCH_IDLE || !net_ready) return false;
+    if (!worker_ready || state != FETCH_IDLE || !net_ready) return false;
     snprintf(job_url, sizeof(job_url), "%s", url);
     snprintf(task_path, sizeof(task_path), "%s", dest_path);
     memset(&dl_progress, 0, sizeof(dl_progress));
@@ -222,7 +231,7 @@ bool fetch_start_download(const char *url, const char *dest_path) {
 }
 
 bool fetch_start_unzip(const char *zip_path, const char *dest_dir) {
-    if (state != FETCH_IDLE) return false;
+    if (!worker_ready || state != FETCH_IDLE) return false;
     snprintf(task_path, sizeof(task_path), "%s", zip_path);
     snprintf(task_dest, sizeof(task_dest), "%s", dest_dir);
     memset(&uz_progress, 0, sizeof(uz_progress));
@@ -246,7 +255,7 @@ JobKind fetch_job_kind(void) { return kind; }
 const char *fetch_stage(void) { return stage_buf; }
 int fetch_progress(void) { return progress; }
 bool fetch_net_ready(void) { return net_ready; }
-void fetch_retry_network(void) { retry_net = 1; }
+void fetch_retry_network(void) { if (worker_ready) { retry_net = 1; LWP_SemPost(wake); } }
 
 bool fetch_take(HttpResult *out) {
     if (state != FETCH_DONE || kind != JOB_PAGE) return false;

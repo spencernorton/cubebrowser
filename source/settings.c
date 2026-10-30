@@ -1,5 +1,6 @@
 /* settings.c - defaults, validation and INI persistence (sd:/gcbrowser/settings.ini). */
 #include "settings.h"
+#include "launch.h"
 #include "storage.h"
 #include "theme.h"
 #include "gfx.h"
@@ -95,7 +96,7 @@ const SetDef g_setdefs[] = {
     { CAT_DISPLAY, "disp.volume", "Volume", ST_INT, O(volume), 0, 10, 1, NULL, NULL, NULL },
     /* Browsing */
     { CAT_BROWSING, "web.home", "Home page", ST_STR, O(home), OSK_TEXTMODE_URL, 256, 0, NULL, NULL,
-      "Use about:home for the built-in start page." },
+      "Default: norvitech.com/indigo/start/. about:home works offline." },
     { CAT_BROWSING, "web.search", "Search engine", ST_CHOICE, O(search_engine), 0, 3, 1, search_engine_names, NULL,
       "Lightweight engines work best on GameCube." },
     { CAT_BROWSING, "web.searchurl", "Custom search URL", ST_STR, O(search_custom), OSK_TEXTMODE_URL, 256, 0, NULL, NULL,
@@ -174,7 +175,7 @@ void settings_defaults(Settings *s) {
     s->animations = 1;
     s->sounds = 1;
     s->volume = 7;
-    strcpy(s->home, "about:home");
+    strcpy(s->home, "https://norvitech.com/indigo/start/");
     s->search_engine = 0;
     strcpy(s->search_custom, "https://html.duckduckgo.com/html/?q=");
     s->user_agent = 0;
@@ -279,6 +280,8 @@ bool settings_load(void) {
 }
 
 bool settings_save(void) {
+    Settings stored = g_set;
+    launch_preserve(&stored);
     size_t cap = 8192, n = 0;
     char *buf = malloc(cap);
     if (!buf) return false;
@@ -289,11 +292,11 @@ bool settings_save(void) {
             const SetDef *d = &g_setdefs[i];
             if (d->cat != c || !d->key) continue;
             if (d->type == ST_STR)
-                n += snprintf(buf + n, cap - n, "%s=%s\n", d->key, setdef_str(d));
+                n += snprintf(buf + n, cap - n, "%s=%s\n", d->key, (const char *)&stored + d->off);
             else if (d->type == ST_BIND)
-                n += snprintf(buf + n, cap - n, "%s=%s\n", d->key, button_names[*setdef_int(d)]);
+                n += snprintf(buf + n, cap - n, "%s=%s\n", d->key, button_names[*(const int *)((const char *)&stored + d->off)]);
             else
-                n += snprintf(buf + n, cap - n, "%s=%d\n", d->key, *setdef_int(d));
+                n += snprintf(buf + n, cap - n, "%s=%d\n", d->key, *(const int *)((const char *)&stored + d->off));
         }
     }
     bool ok = storage_write_atomic(STORAGE_DIR "/settings.ini", STORAGE_DIR "/settings.tmp", buf, n);

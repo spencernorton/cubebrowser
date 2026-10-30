@@ -1,5 +1,6 @@
 /* theme.c - Indigo, Jet Black, Platinum and Spice colour schemes. */
 #include "theme.h"
+#include "launch.h"
 
 #define C(r, g, b, a) { r, g, b, a }
 
@@ -64,11 +65,28 @@ static const Theme themes[THEME_COUNT] = {
     },
 };
 
-static int current = THEME_INDIGO;
-
-const Theme *theme(void) { return &themes[current]; }
-
+static Theme current;
+const Theme *theme(void) { return &current; }
 void theme_set(int idx) {
     if (idx < 0 || idx >= THEME_COUNT) idx = THEME_INDIGO;
-    current = idx;
+    current = themes[idx];
+    static const Color accents[] = {
+        C(151, 145, 225, 255), C(108, 175, 231, 255), C(105, 197, 153, 255), C(222, 193, 108, 255),
+        C(231, 159, 104, 255), C(220, 112, 124, 255), C(220, 139, 188, 255), C(178, 180, 193, 255)
+    };
+    int color = g_launch.active && g_launch.color >= 0 ? g_launch.color :
+        (idx == THEME_JET ? 7 : idx == THEME_SPICE ? 4 : 0);
+    current.bg_top = current.bg_bottom = rgba(8, 12, 27, 255);
+    current.panel_top = current.panel_bottom = rgba(20, 25, 43, 255);
+    current.panel_edge = rgba(66, 72, 97, 255);
+    current.button_top = current.button_bottom = rgba(30, 36, 57, 255);
+    current.accent = accents[color];
+    current.accent_hi = color_lerp(current.accent, rgba(255,255,255,255), .15f);
+    current.text = rgba(239, 240, 247, 255);
+    current.text_dim = rgba(168, 176, 199, 255);
+    current.text_on_accent = rgba(10, 13, 27, 255);
+    current.field_bg = rgba(10, 15, 31, 255);
+    current.field_text = current.text;
+    current.cursor_fill = current.text;
+    current.cursor_edge = rgba(30, 25, 67, 255);
 }

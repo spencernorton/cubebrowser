@@ -16,7 +16,7 @@ static inline Color rgba(u8 r, u8 g, u8 b, u8 a) { Color c = { r, g, b, a }; ret
 Color color_alpha(Color c, float mul);
 Color color_lerp(Color a, Color b, float t);
 
-typedef enum { FONT_UI = 0, FONT_BODY = 1, FONT_ITALIC = 2, FONT_MONO = 3, FONT_COUNT } FontId;
+typedef enum { FONT_UI = 0, FONT_BODY = 1, FONT_ITALIC = 2, FONT_MONO = 3, FONT_CHROME = 4, FONT_COUNT } FontId;
 
 enum { VMODE_AUTO = 0, VMODE_480I = 1, VMODE_480P = 2 };
 
@@ -43,6 +43,7 @@ void gfx_clear_clip(void);
 void gfx_rect(float x, float y, float w, float h, Color c);
 void gfx_rect_vgrad(float x, float y, float w, float h, Color top, Color bottom);
 void gfx_rect_hgrad(float x, float y, float w, float h, Color left, Color right);
+void gfx_cut_rect(float x, float y, float w, float h, float cut, Color c);
 void gfx_rrect(float x, float y, float w, float h, float r, Color c);
 void gfx_rrect_vgrad(float x, float y, float w, float h, float r, Color top, Color bottom);
 void gfx_rrect_outline(float x, float y, float w, float h, float r, float thick, Color c);

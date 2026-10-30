@@ -4,6 +4,7 @@
  * files installed for it; failing that, the first card with the folder, then
  * the first card found. */
 #include "storage.h"
+#include "launch.h"
 #include <fat.h>
 #include <ogc/dvd.h>
 #include <sdcard/gcsd.h>
@@ -16,12 +17,21 @@ static bool mounted;
 static const char *device = "none";
 
 bool storage_init(void) {
-    struct { const DISC_INTERFACE *io; const char *name; } devs[] = {
-        { &__io_gcsd2, "SD2SP2" },
-        { &__io_gcsdb, "SD Gecko (slot B)" },
-        { &__io_gcsda, "SD Gecko (slot A)" },
-        { &__io_gcode, "GC Loader" },
+    struct { const DISC_INTERFACE *io; const char *name; const char *id; } devs[] = {
+        { &__io_gcsd2, "SD2SP2", "sdc" },
+        { &__io_gcsdb, "SD Gecko (slot B)", "sdb" },
+        { &__io_gcsda, "SD Gecko (slot A)", "sda" },
+        { &__io_gcode, "GC Loader", "gcldr" },
     };
+    if (g_launch.active && g_launch.device[0]) {
+        for (unsigned i = 0; i < sizeof(devs) / sizeof(devs[0]); i++) {
+            if (strcmp(g_launch.device, devs[i].id) || !fatMountSimple("sd", devs[i].io)) continue;
+            mounted = true;
+            device = devs[i].name;
+            mkdir(STORAGE_DIR, 0777);
+            return true;
+        }
+    }
     int best = -1, best_score = -1;
     struct stat st;
     for (unsigned i = 0; i < sizeof(devs) / sizeof(devs[0]); i++) {

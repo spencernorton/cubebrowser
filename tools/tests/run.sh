@@ -23,3 +23,9 @@ $CC $CF -Isource tools/tests/test_dns.c source/dns_cache.c -o "$WORK/dns"
 $CC $CF -Wno-unused-parameter -Itools/fuzz/stubs -Isource tools/tests/test_page.c tools/tests/page_support.c \
     source/page.c source/page_images.c source/viewport.c source/dom.c source/css.c source/url.c source/bigstack.c -lm -o "$WORK/page"
 "$WORK/page"
+
+$CC $CF -Itools/fuzz/stubs -Isource tools/tests/test_launch.c source/launch.c source/settings.c -lm -o "$WORK/launch"
+"$WORK/launch"
+$CC $CF -Itools/tests -Itools/tests/stubs -Itools/fuzz/stubs -Isource -include tools/tests/input_sdk.h \
+    tools/tests/test_input.c source/input.c source/controller.c -lm -o "$WORK/input"
+"$WORK/input"
