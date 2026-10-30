@@ -99,6 +99,7 @@ int main(int argc, char **argv) {
         diag_note(DIAG_MAIN, "reading controller");
         input_update();
         ui_begin_frame();
+        if (screen == SCREEN_BROWSER && trans >= 1.0f) browser_update();
         gfx_begin_frame();
         ui_draw_background();
 

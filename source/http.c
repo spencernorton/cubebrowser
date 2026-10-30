@@ -5,6 +5,7 @@
 #include "conn.h"
 #include "netio.h"
 #include "settings.h"
+#include "gzip.h"
 #include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -154,7 +155,7 @@ static int fetch_once(const char *url, const char *post, const char *accept, Htt
     else snprintf(hosthdr, sizeof(hosthdr), "%s:%u", u.host, u.port);
     int n = snprintf(req, sizeof(req),
                      "%s %s HTTP/1.1\r\nHost: %s\r\nUser-Agent: %s\r\nAccept: %s\r\n"
-                     "Accept-Language: en\r\nAccept-Encoding: identity\r\nConnection: keep-alive\r\n",
+                     "Accept-Language: en\r\nAccept-Encoding: gzip\r\nConnection: keep-alive\r\n",
                      post ? "POST" : "GET", u.path, hosthdr, user_agent_strings[g_set.user_agent],
                      accept ? accept : DEFAULT_ACCEPT);
     if (post && n < (int)sizeof(req))
@@ -179,7 +180,7 @@ static int fetch_once(const char *url, const char *post, const char *accept, Htt
     r->c = &kconn;
     char line[1024];
     long content_length = -1;
-    bool chunked = false, server_close = false, complete = false;
+    bool chunked = false, server_close = false, complete = false, gzipped = false;
     Body b = { 0 };
 
     /* status line, skipping any 1xx interim responses */
@@ -208,6 +209,17 @@ static int fetch_once(const char *url, const char *post, const char *accept, Htt
         while (*val == ' ' || *val == '\t') val++;
         if (!strcasecmp(line, "content-length")) content_length = atol(val);
         else if (!strcasecmp(line, "transfer-encoding") && strstr(val, "chunked")) chunked = true;
+        else if (!strcasecmp(line, "content-encoding")) {
+            char encoding[32];
+            snprintf(encoding, sizeof(encoding), "%s", val);
+            size_t length = strlen(encoding);
+            while (length && isspace((unsigned char)encoding[length - 1])) encoding[--length] = 0;
+            if (!strcasecmp(encoding, "gzip") || !strcasecmp(encoding, "x-gzip")) gzipped = true;
+            else if (strcasecmp(encoding, "identity")) {
+                snprintf(res->error, sizeof(res->error), "The site sent unsupported compressed data.");
+                goto fail;
+            }
+        }
         else if (!strcasecmp(line, "content-type")) snprintf(res->content_type, sizeof(res->content_type), "%s", val);
         else if (!strcasecmp(line, "location")) snprintf(location, loclen, "%s", val);
         else if (!strcasecmp(line, "connection") && contains_nocase(val, "close")) server_close = true;
@@ -257,6 +269,18 @@ static int fetch_once(const char *url, const char *post, const char *accept, Htt
         goto fail;
     }
     if (!b.data) { b.data = calloc(1, 1); b.len = 0; }
+    if (gzipped && !no_body) {
+        char *decoded;
+        size_t decoded_length;
+        if (b.truncated || !gzip_decode((const unsigned char *)b.data, b.len, b.limit, &decoded, &decoded_length)) {
+            free(b.data);
+            snprintf(res->error, sizeof(res->error), "Compressed page is damaged or exceeds the page size limit.");
+            goto fail;
+        }
+        free(b.data);
+        b.data = decoded;
+        b.len = decoded_length;
+    }
     res->body = b.data;
     res->body_len = b.len;
     res->truncated = b.truncated;

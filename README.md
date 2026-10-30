@@ -231,7 +231,9 @@ to reset everything to defaults.
   images.weserv.nl service, which shrinks them for your screen and converts
   formats the GameCube can't read (such as WebP). It makes pictures much faster
   and work on more sites, but that service sees the address of each picture
-  you view. Turn it off to fetch pictures directly.
+  you view. Local network addresses are fetched directly, and a failed helper
+  request gets one attempt at the original address. Turn it off to fetch all
+  pictures directly.
 - **Verify certificates** should stay on. Turning it off removes the
   protection HTTPS provides; it's only meant for troubleshooting.
 
@@ -262,7 +264,7 @@ Older and hobbyist sites from the 1990s and 2000s usually display very well.
 | **A secure site says its certificate couldn't be verified** | Usually the clock. Make sure the time server under Settings > Network is reachable (the default `pool.ntp.org` works for most people). If it persists, download a fresh certificate list from `https://curl.se/ca/cacert.pem` and replace `gcbrowser/cacert.pem` on the SD card. |
 | **A page is blank or nearly empty** | The site probably builds its content with JavaScript, which isn't supported. Try the site's mobile or "lite" version, or open it through FrogFind. |
 | **A page looks cluttered or oddly arranged** | Modern multi-column layouts are shown as a single column. Try Settings > Browsing > Page styles: Off for a clean, plain view. |
-| **Pictures don't appear** | Check Settings > Browsing > Load images. With the image helper off, some formats (like WebP) can't be shown. Very large pages show only their first several pictures to save memory. |
+| **Pictures don't appear** | Check Settings > Browsing > Load images. With the image helper off, some formats (like WebP) can't be shown. Pictures load near the visible page; distant textures are released to make room as you scroll. |
 | **A page is cut off at the end** | It was larger than the page size limit. Raise Settings > Browsing > Max page size. |
 | **The screen edges are cut off on my TV** | Increase Settings > Display > Screen margin. |
 | **The picture looks squashed or stretched** | Match Settings > Display > Aspect ratio to your TV's setting. |
@@ -280,7 +282,7 @@ Older and hobbyist sites from the 1990s and 2000s usually display very well.
 - **No modern multi-column layouts** (CSS flexbox and grid). These sections
   are stacked into a single column.
 - **No video, audio or animation.** Animated GIFs show their first frame.
-- **Drop-down menus** show their selected choice but can't be changed yet.
+- **Drop-down menus** support up to 64 enabled choices per menu.
 - **Frames** open one part at a time rather than side by side.
 - **Unzipping** supports standard `.zip` files; 7z, RAR and RVZ aren't supported.
 - **Speed:** heavy pages can take several seconds to lay out, and each new
@@ -363,6 +365,15 @@ emulator. To run the parser cases locally with Clang:
 ```sh
 sh tools/fuzz/run.sh --regressions
 ```
+
+Run the engine checks with `sh tools/tests/run.sh`. They exercise the viewport
+index against an exhaustive oracle, image ownership and reclamation, text
+painter order, dropdown submission, redirects, bounded gzip decoding and DNS
+expiry under AddressSanitizer and UndefinedBehaviorSanitizer. The index retains
+document painter order and falls back to scanning if its allocation fails.
+Image textures share identical URLs and use a 6 MiB budget; this is an in-memory
+working set, not a persistent browsing cache. DNS entries expire at the response
+TTL, capped at five minutes. Automatic meta refresh is limited to eight hops.
 
 Pass a number of seconds instead to run both parser fuzz targets after the
 saved cases. Generated inputs stay in a temporary directory.

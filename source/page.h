@@ -7,6 +7,7 @@
 #include "url.h"
 #include "dom.h"
 #include "css.h"
+#include "viewport.h"
 
 enum { BOX_TEXT, BOX_FILL, BOX_BULLET, BOX_INPUT, BOX_SUBMIT, BOX_IMAGE, BOX_CHECK, BOX_SELECT };
 enum { BF_UNDERLINE = 1, BF_STRIKE = 2, BF_BG = 4, BF_CIRCLE = 8, BF_SQUARE = 16, BF_RADIO = 32 };
@@ -29,6 +30,8 @@ typedef struct {
     char name[64];
     char value[256];
     char label[64];     /* submit/select caption */
+    const Node *node;
+    bool disabled;
 } Field;
 
 typedef struct {
@@ -36,12 +39,15 @@ typedef struct {
     bool post;
 } Form;
 
-enum { IMG_NONE, IMG_LOADING, IMG_READY, IMG_FAILED, IMG_SKIPPED };
+enum { IMG_NONE, IMG_LOADING, IMG_READY, IMG_FAILED, IMG_SKIPPED, IMG_DEFERRED };
 
 typedef struct {
     char *url;
     short decl_w, decl_h;
+    short known_w, known_h, owner;
     unsigned char state;
+    bool direct;
+    size_t bytes;
     GfxImage img;
 } PageImage;
 
@@ -69,6 +75,8 @@ typedef struct {
     char url[URL_MAX];
     char base[URL_MAX];
     char title[128];
+    char refresh_url[URL_MAX];
+    unsigned refresh_seconds;
     bool secure, verified, truncated;
     Dom *dom;
     Arena style_arena;
@@ -81,6 +89,7 @@ typedef struct {
     /* layout output */
     Box *boxes;
     int nboxes, capboxes;
+    Viewport viewport;
     char *arena;
     int arena_len, arena_cap;
     char **links;
@@ -110,11 +119,16 @@ void page_layout(Page *p, float width, float text_scale);
 void page_free(Page *p);
 void page_free_images(Page *p);
 void page_draw(Page *p, float x, float y, float w, float h, int hover_link, int hover_field);
+/* NULL indices means allocation failed at layout: callers scan the boxes. */
+int page_visible(Page *p, float top, float height, const int **indices);
 int  page_hit(Page *p, float px, float py, int *field_out);
 const char *page_link_url(Page *p, int link);
 bool page_link_is_download(Page *p, int link);
 bool page_build_submit(Page *p, int field_idx, int submit_field, char *url_out, size_t url_len, char **post_out);
 void page_toggle_field(Page *p, int field);
+typedef struct { char label[96], value[256]; } SelectOption;
+int page_select_options(Page *p, int field, SelectOption *out, int maximum, int *current);
+bool page_select_choose(Page *p, int field, const SelectOption *option);
 
 /* Stylesheets: next external sheet to download (-1 if none), and delivery. */
 int  page_next_sheet(Page *p);

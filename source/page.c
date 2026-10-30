@@ -13,6 +13,7 @@
  * Not supported: flexbox/grid (treated as blocks), positioning, transforms.
  */
 #include "page.h"
+#include "page_images.h"
 #include "theme.h"
 #include "settings.h"
 #include "bigstack.h"
@@ -115,12 +116,14 @@ static void text_of(const Node *n, char *out, size_t cap) {
     while (o && out[o - 1] == ' ') out[--o] = 0;
 }
 
-static int field_add(Page *p, int form, int type, const char *name, const char *value) {
+static int field_add(Page *p, const Node *node, int form, int type, const char *name, const char *value) {
     if (p->nfields >= PAGE_MAX_FIELDS) return -1;
     Field *f = &p->fields[p->nfields];
     memset(f, 0, sizeof(*f));
     f->form = form;
     f->type = (unsigned char)type;
+    f->node = node;
+    f->disabled = dom_attr(node, "disabled") != NULL;
     snprintf(f->name, sizeof(f->name), "%s", name ? name : "");
     snprintf(f->value, sizeof(f->value), "%s", value ? value : "");
     return p->nfields++;
@@ -130,6 +133,7 @@ static __attribute__((noinline)) int image_add(Page *p, const Node *n) {
     if (p->nimages >= PAGE_MAX_IMAGES) return -1;
     PageImage *im = &p->images[p->nimages];
     memset(im, 0, sizeof(*im));
+    im->owner = -1;
     const char *src = dom_attr(n, "data-src");
     if (!src || !*src) src = dom_attr(n, "data-original");
     if (!src || !*src) src = dom_attr(n, "src");
@@ -159,12 +163,50 @@ static __attribute__((noinline)) int image_add(Page *p, const Node *n) {
 
 static char scratch_url[URL_MAX];   /* prepass helpers run one at a time */
 
+static void read_refresh(Page *p, const Node *node) {
+    const char *equiv = dom_attr(node, "http-equiv"), *value = dom_attr(node, "content");
+    if (p->refresh_url[0] || !equiv || strcasecmp(equiv, "refresh") || !value) return;
+    while (isspace((unsigned char)*value)) value++;
+    unsigned seconds = 0;
+    if (!isdigit((unsigned char)*value)) return;
+    while (isdigit((unsigned char)*value)) {
+        seconds = seconds * 10 + (unsigned)(*value++ - '0');
+        if (seconds > 600) return;
+    }
+    while (isspace((unsigned char)*value)) value++;
+    if (*value++ != ';') return;
+    while (isspace((unsigned char)*value)) value++;
+    if (strncasecmp(value, "url", 3)) return;
+    value += 3;
+    while (isspace((unsigned char)*value)) value++;
+    if (*value++ != '=') return;
+    while (isspace((unsigned char)*value)) value++;
+    const char *end = value + strlen(value);
+    while (end > value && isspace((unsigned char)end[-1])) end--;
+    if (end > value && (*value == '\'' || *value == '"')) {
+        if (end - value < 2 || end[-1] != *value) return;
+        value++; end--;
+    }
+    size_t length = (size_t)(end - value);
+    if (!length || length >= sizeof(scratch_url)) return;
+    memcpy(scratch_url, value, length);
+    scratch_url[length] = 0;
+    url_resolve(p->base, scratch_url, p->refresh_url, sizeof(p->refresh_url));
+    Url target;
+    if (!url_parse(p->refresh_url, &target) || (strcmp(target.scheme, "http") && strcmp(target.scheme, "https"))) {
+        p->refresh_url[0] = 0;
+        return;
+    }
+    p->refresh_seconds = seconds;
+}
+
 /* Handles one element. Kept out of line so the recursive prepass() stays tiny. */
 static __attribute__((noinline)) void prepass_elem(Page *p, Node *c, int *form) {
         const char *v;
         if (dom_attr(c, "style") || dom_attr(c, "bgcolor") || (c->tag == TAG_FONT && dom_attr(c, "color")))
             p->has_author_styles = true;
         switch (c->tag) {
+        case TAG_META: read_refresh(p, c); break;
         case TAG_BASE:
             if ((v = dom_attr(c, "href"))) url_resolve(p->url, v, p->base, sizeof(p->base));
             break;
@@ -210,7 +252,7 @@ static __attribute__((noinline)) void prepass_elem(Page *p, Node *c, int *form) 
             }
             if (t < 0) break;
             if ((t == FIELD_CHECK || t == FIELD_RADIO) && !val) val = "on";
-            c->index = field_add(p, *form, t, name, val);
+            c->index = field_add(p, c, *form, t, name, val);
             if (c->index >= 0) {
                 Field *f = &p->fields[c->index];
                 f->checked = dom_attr(c, "checked") != NULL;
@@ -223,13 +265,13 @@ static __attribute__((noinline)) void prepass_elem(Page *p, Node *c, int *form) 
         case TAG_TEXTAREA: {
             char content[256];
             text_of(c, content, sizeof(content));
-            c->index = field_add(p, *form, FIELD_TEXT, dom_attr(c, "name"), content);
+            c->index = field_add(p, c, *form, FIELD_TEXT, dom_attr(c, "name"), content);
             break;
         }
         case TAG_BUTTON: {
             const char *type = dom_attr(c, "type");
             if (type && strcasecmp(type, "submit")) break;
-            c->index = field_add(p, *form, FIELD_SUBMIT, dom_attr(c, "name"), dom_attr(c, "value"));
+            c->index = field_add(p, c, *form, FIELD_SUBMIT, dom_attr(c, "name"), dom_attr(c, "value"));
             if (c->index >= 0) {
                 text_of(c, p->fields[c->index].label, sizeof(p->fields[c->index].label));
                 if (!p->fields[c->index].label[0]) snprintf(p->fields[c->index].label, 64, "Submit");
@@ -254,7 +296,7 @@ static __attribute__((noinline)) void prepass_elem(Page *p, Node *c, int *form) 
                 text_of(chosen, label, sizeof(label));
                 val = dom_attr(chosen, "value");
             }
-            c->index = field_add(p, *form, FIELD_SELECT, dom_attr(c, "name"), val ? val : label);
+            c->index = field_add(p, c, *form, FIELD_SELECT, dom_attr(c, "name"), val ? val : label);
             if (c->index >= 0) snprintf(p->fields[c->index].label, 64, "%s", label);
             break;
         }
@@ -752,7 +794,7 @@ static __attribute__((noinline)) void emit_image(L *c, Flow *f, Node *n, const S
     float cw = f->right - f->left;
     float iw = 0, ih = 0;
     if (im->decl_w && im->decl_h) { iw = im->decl_w; ih = im->decl_h; }
-    else if (im->state == IMG_READY) { iw = im->img.w; ih = im->img.h; }
+    else if (im->known_w && im->known_h) { iw = im->known_w; ih = im->known_h; }
     float ratio = (iw > 0 && ih > 0) ? ih / iw : (im->decl_w && im->decl_h ? (float)im->decl_h / im->decl_w : 0.66f);
     float w = -1, h = -1;
     if (s->width.u != U_UNSET && s->width.u != U_AUTO && !(c->measure && s->width.u == U_PCT))
@@ -1458,12 +1500,7 @@ static void flow_children(L *c, Flow *f, Node *n, const Style *s) {
 void page_init(Page *p) { memset(p, 0, sizeof(*p)); }
 
 void page_free_images(Page *p) {
-    for (int i = 0; i < p->nimages; i++) {
-        free(p->images[i].url);
-        gfx_image_free(&p->images[i].img);
-    }
-    p->nimages = 0;
-    p->image_bytes = 0;
+    page_images_dispose(p);
     p->relayout = false;
 }
 
@@ -1500,8 +1537,10 @@ void page_set_source(Page *p, char *src, size_t len, bool plain, const char *url
     p->nfields = 0;
     p->nforms = 0;
     p->nboxes = 0;
+    p->viewport.ready = false;
     p->has_author_styles = false;
     p->nframes = 0;
+    p->refresh_url[0] = 0;
     p->scroll = p->scroll_target = 0;
     p->dom = NULL;
     run_with_big_stack(parse_job, p);
@@ -1509,6 +1548,17 @@ void page_set_source(Page *p, char *src, size_t len, bool plain, const char *url
 }
 
 static void layout_job(void *arg);
+
+static void box_bounds(const void *context, int i, float *top, float *height) {
+    const Page *p = context;
+    *top = p->boxes[i].y;
+    *height = p->boxes[i].h;
+}
+
+int page_visible(Page *p, float top, float height, const int **indices) {
+    if (!p->viewport.ready) { *indices = NULL; return p->nboxes; }
+    return viewport_query(&p->viewport, top, height, indices);
+}
 
 void page_layout(Page *p, float width, float text_scale) {
     p->width = width;
@@ -1543,6 +1593,7 @@ static void layout_job(void *arg) {
     float fb = floats_bottom(p, 0, 0, width, CL_BOTH);
     if (fb > bottom) bottom = fb;
     p->content_h = bottom + 12;
+    viewport_build(&p->viewport, p->nboxes, box_bounds, p);
 }
 
 void page_free(Page *p) {
@@ -1553,6 +1604,7 @@ void page_free(Page *p) {
     arena_free(&p->style_arena);
     free(p->src);
     free(p->boxes);
+    viewport_free(&p->viewport);
     free(p->arena);
     free(p->links);
     free(p->link_dl);
@@ -1567,15 +1619,57 @@ static void clip_inter(float ax, float ay, float aw, float ah, float bx, float b
     gfx_set_clip(x0, y0, x1 > x0 ? x1 - x0 : 0, y1 > y0 ? y1 - y0 : 0);
 }
 
+static bool drawable(const Box *b) {
+    return isfinite(b->x) && isfinite(b->y) && isfinite(b->w) && isfinite(b->h) &&
+           b->w >= 0 && b->h >= 0 && b->w <= 8192 && b->h <= 8192;
+}
+
+/* Only batch disjoint spans on the same line. An overlapping span or any
+ * intervening fill/widget keeps its original painter position. */
+static int text_run_end(Page *p, const int *visible, int first, int count, int hover) {
+    const Box *a = &p->boxes[visible ? visible[first] : first];
+    float right = a->x + a->w + (a->link >= 0 && a->link == hover ? 3 : 2);
+    int end = first + 1;
+    for (; end < count; end++) {
+        const Box *b = &p->boxes[visible ? visible[end] : end];
+        float pad = b->link >= 0 && b->link == hover ? 3 : 2;
+        if (b->type != BOX_TEXT || !drawable(b) || b->font == FONT_ITALIC || b->font != a->font || b->size != a->size ||
+            b->y != a->y || b->h != a->h || b->x - pad < right) break;
+        right = b->x + b->w + pad;
+    }
+    return end;
+}
+
+static void draw_text_run(Page *p, const int *visible, int first, int end, float x, float y, int hover) {
+    const Theme *t = theme();
+    for (int pass = 0; pass < 3; pass++) {
+        for (int vi = first; vi < end; vi++) {
+            const Box *b = &p->boxes[visible ? visible[vi] : vi];
+            float bx = x + b->x, by = y + b->y - p->scroll;
+            bool selected = b->link >= 0 && b->link == hover;
+            Color c = selected ? t->page_link_hover : b->color;
+            if (pass == 0) {
+                if (b->flags & BF_BG) gfx_rect(bx - 1, by, b->w + 2, b->h, b->bg);
+                if (selected) gfx_rrect(bx - 3, by - 1, b->w + 6, b->h + 2, 5, color_alpha(t->accent, 0.3f));
+            } else if (pass == 1) {
+                gfx_text((FontId)b->font, b->size, bx, by, c, p->arena + b->text, b->len);
+            } else {
+                if (b->flags & BF_UNDERLINE) gfx_rect(bx, by + b->h - 3, b->w, selected ? 2 : 1, color_alpha(c, 0.8f));
+                if (b->flags & BF_STRIKE) gfx_rect(bx, by + b->h * 0.55f, b->w, 1.5f, c);
+            }
+        }
+    }
+}
+
 void page_draw(Page *p, float x, float y, float w, float h, int hover_link, int hover_field) {
     const Theme *t = theme();
     float top = p->scroll;
+    const int *visible;
+    int nvisible = page_visible(p, top, h, &visible);
     gfx_set_clip(x, y, w, h);
-    for (int i = 0; i < p->nboxes; i++) {
-        Box *b = &p->boxes[i];
-        if (!isfinite(b->x) || !isfinite(b->y) || !isfinite(b->w) || !isfinite(b->h) || b->w > 8192 || b->h > 8192 ||
-            b->w < 0 || b->h < 0)
-            continue;   /* never hand the GPU nonsense */
+    for (int vi = 0; vi < nvisible; vi++) {
+        Box *b = &p->boxes[visible ? visible[vi] : vi];
+        if (!drawable(b)) continue;   /* never hand the GPU nonsense */
         if (b->y + b->h < top || b->y > top + h) continue;
         float bx = x + b->x, by = y + b->y - top;
         switch (b->type) {
@@ -1583,15 +1677,9 @@ void page_draw(Page *p, float x, float y, float w, float h, int hover_link, int 
             if (b->bg.a) gfx_rect(bx, by, b->w, b->h, b->bg);
             break;
         case BOX_TEXT: {
-            Color c = b->color;
-            if (b->flags & BF_BG) gfx_rect(bx - 1, by, b->w + 2, b->h, b->bg);
-            if (b->link >= 0 && b->link == hover_link) {
-                gfx_rrect(bx - 3, by - 1, b->w + 6, b->h + 2, 5, color_alpha(t->accent, 0.3f));
-                c = t->page_link_hover;
-            }
-            gfx_text((FontId)b->font, b->size, bx, by, c, p->arena + b->text, b->len);
-            if (b->flags & BF_UNDERLINE) gfx_rect(bx, by + b->h - 3, b->w, b->link == hover_link ? 2 : 1, color_alpha(c, 0.8f));
-            if (b->flags & BF_STRIKE) gfx_rect(bx, by + b->h * 0.55f, b->w, 1.5f, c);
+            int end = text_run_end(p, visible, vi, nvisible, hover_link);
+            draw_text_run(p, visible, vi, end, x, y, hover_link);
+            vi = end - 1;
             break;
         }
         case BOX_BULLET:
@@ -1701,6 +1789,37 @@ void page_toggle_field(Page *p, int f) {
     }
 }
 
+int page_select_options(Page *p, int field, SelectOption *out, int maximum, int *current) {
+    *current = -1;
+    if (field < 0 || field >= p->nfields || p->fields[field].type != FIELD_SELECT ||
+        p->fields[field].disabled || !p->fields[field].node || maximum <= 0) return 0;
+    const Field *f = &p->fields[field];
+    int count = 0;
+    for (const Node *n = f->node->first; n && count < maximum; n = n->next) {
+        if (n->tag == TAG_OPTGROUP && dom_attr(n, "disabled")) continue;
+        const Node *option = n->tag == TAG_OPTGROUP ? n->first : n;
+        for (; option && count < maximum; option = n->tag == TAG_OPTGROUP ? option->next : NULL) {
+            if (option->tag != TAG_OPTION || dom_attr(option, "disabled")) continue;
+            SelectOption *o = &out[count];
+            text_of(option, o->label, sizeof(o->label));
+            const char *value = dom_attr(option, "value");
+            snprintf(o->value, sizeof(o->value), "%s", value ? value : o->label);
+            if (!strcmp(o->value, f->value) && !strncmp(o->label, f->label, sizeof(f->label) - 1)) *current = count;
+            if (!o->label[0]) snprintf(o->label, sizeof(o->label), "%s", o->value[0] ? o->value : "(blank)");
+            count++;
+        }
+    }
+    return count;
+}
+
+bool page_select_choose(Page *p, int field, const SelectOption *option) {
+    if (field < 0 || field >= p->nfields || p->fields[field].type != FIELD_SELECT || p->fields[field].disabled) return false;
+    snprintf(p->fields[field].value, sizeof(p->fields[field].value), "%s", option->value);
+    snprintf(p->fields[field].label, sizeof(p->fields[field].label), "%s", option->label);
+    p->relayout = true;
+    return true;
+}
+
 bool page_build_submit(Page *p, int field_idx, int submit_field, char *url_out, size_t url_len, char **post_out) {
     *post_out = NULL;
     if (field_idx < 0 || field_idx >= p->nfields) return false;
@@ -1712,7 +1831,7 @@ bool page_build_submit(Page *p, int field_idx, int submit_field, char *url_out, 
     q[0] = 0;
     for (int i = 0; i < p->nfields; i++) {
         Field *f = &p->fields[i];
-        if (f->form != form || !f->name[0]) continue;
+        if (f->form != form || !f->name[0] || f->disabled) continue;
         if (f->type == FIELD_SUBMIT && i != submit_field) continue;
         if ((f->type == FIELD_CHECK || f->type == FIELD_RADIO) && !f->checked) continue;
         char en[200], ev[800];

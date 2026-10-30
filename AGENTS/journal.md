@@ -1,3 +1,22 @@
+## 2026-10-29 — Bound the visible page working set
+
+Index layout spans for drawing, hit targets and nearby image scheduling while
+preserving document painter order. Share repeated image textures, retain
+intrinsic dimensions after eviction and reclaim distant textures within the
+6 MiB working set. Batch only disjoint text spans on the same line. Move fetch
+publication, relayout and scheduling out of rendering into one active update.
+Add bounded, checked gzip responses, a short TTL DNS cache, known search
+redirects, bounded meta refresh and controller-selectable dropdowns. Local
+image URLs bypass the helper; failed helper requests try the origin once.
+
+The sanitizer host suites and all seven saved parser inputs pass. The pinned
+SDK builds the DOL. The local Dolphin cached interpreter boots that exact DOL,
+fetches and renders two gzip HTML pages and their PNGs, opens/closes menus,
+follows a link and restores Back. The default ARM JIT also exits on the
+unchanged baseline; the optional core argument makes this local qualification
+explicit without changing CI's default. Physical adapters and Indigo return
+still need console qualification of the integrated candidate.
+
 ## 2026-10-29 — Require saved parser regressions
 
 Repair the host SDK stand-in after gfx.h gained the video-mode type and add
