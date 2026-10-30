@@ -26,7 +26,7 @@ jobs:
 
       - name: Cache the pinned emulator image
         id: emulator-cache
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: /tmp/cube-emulator.tar
           key: cube-emulator-amd64-${{ hashFiles('tests/runtime/Dockerfile', 'tests/runtime/dolphin/*.patch') }}
@@ -39,6 +39,13 @@ jobs:
             docker build -t cube-runtime tests/runtime
             docker save cube-runtime -o /tmp/cube-emulator.tar
           fi
+
+      - name: Save the built emulator before runtime checks
+        if: steps.emulator-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: /tmp/cube-emulator.tar
+          key: ${{ steps.emulator-cache.outputs.cache-primary-key }}
 
       - name: Test the console lab's request parser
         # ui_lab.c and its test are Indigo's, copied unchanged.
@@ -70,6 +77,8 @@ jobs:
 
       - name: Boot and use this candidate
         run: |
+          # Container output must not create this runner-owned parent as root.
+          mkdir -p runtime-evidence
           docker network create --internal --subnet 192.0.2.0/24 cube-runtime
           trap 'docker network rm cube-runtime' EXIT
           docker run --rm --network cube-runtime --ip 192.0.2.3 --cpus 2 --memory 3g \
@@ -92,6 +101,40 @@ jobs:
             -v "$PWD:/work" -v "$RUNNER_TEMP/zip-cert:/cert:ro" cube-runtime \
             python3 tests/runtime/run_zip.py --dol cubebrowser.dol --card-files sd/gcbrowser \
               --cert-dir /cert --out runtime-evidence/zip-restarts
+
+      - name: Build the pinned Indigo launcher
+        env:
+          INDIGO_REF: 3d9512b2ec9e8a84e57a65670ebb294585b7c4d0
+        run: |
+          git clone --filter=blob:none --no-checkout https://github.com/spencernorton/indigo.git "$RUNNER_TEMP/indigo"
+          git -C "$RUNNER_TEMP/indigo" checkout --detach "$INDIGO_REF"
+          docker run --rm -u "$(id -u):$(id -g)" -e LC_ALL=C.UTF-8 \
+            -v "$RUNNER_TEMP/indigo:/indigo" -w /indigo \
+            ghcr.io/extremscorner/libogc2@sha256:f9ffb7e33c4ba4010da8e40c01366f7c24732130146abd99690403bd42d3e4c2 make -j8 dev
+          # This source/toolchain/locale tuple must reproduce the green beta package.
+          printf '%s  %s\n' 45b371fe823e315b15ba84f1f406ebc8b94d2b48ff56df0d5bdca1fcbbe5ea4c \
+            "$RUNNER_TEMP/indigo/cube/swiss/swiss.dol" | sha256sum -c -
+          mkdir -p runtime-evidence/indigo-return
+          python3 "$RUNNER_TEMP/indigo/buildtools/ci/verify_dol.py" "$RUNNER_TEMP/indigo/cube/swiss/swiss.dol" \
+            --revision "$INDIGO_REF" --short "$(printf '%s' "$INDIGO_REF" | cut -c1-7)" \
+            --toolchain ghcr.io/extremscorner/libogc2@sha256:f9ffb7e33c4ba4010da8e40c01366f7c24732130146abd99690403bd42d3e4c2 \
+            --out runtime-evidence/indigo-return/indigo-provenance.json
+
+      - name: Prove Indigo launches and reloads through both return controls
+        run: |
+          docker network create --internal --subnet 192.0.2.0/24 cube-indigo
+          trap 'docker network rm cube-indigo' EXIT
+          docker run --rm --network cube-indigo --ip 192.0.2.3 --cpus 2 --memory 3g \
+            -v "$PWD:/work" -v "$RUNNER_TEMP/indigo:/indigo:ro" cube-runtime \
+            python3 tests/runtime/run_indigo.py --dol cubebrowser.dol --card-files sd/gcbrowser \
+              --indigo-src /indigo --indigo-dol /indigo/cube/swiss/swiss.dol \
+              --indigo-provenance runtime-evidence/indigo-return/indigo-provenance.json --out runtime-evidence/indigo-return
+          docker run --rm --network cube-indigo --ip 192.0.2.3 --cpus 2 --memory 3g \
+            -v "$PWD:/work" -v "$RUNNER_TEMP/indigo:/indigo:ro" cube-runtime \
+            python3 tests/runtime/run_indigo.py --dol cubebrowser.dol --card-files sd/gcbrowser \
+              --indigo-src /indigo --indigo-dol /indigo/cube/swiss/swiss.dol \
+              --indigo-provenance runtime-evidence/indigo-return/indigo-provenance.json \
+              --out runtime-evidence/indigo-return-motion-off --no-motion
 
       - name: Runtime evidence
         if: always()

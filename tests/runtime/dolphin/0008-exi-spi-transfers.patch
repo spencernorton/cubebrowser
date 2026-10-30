@@ -1,0 +1,56 @@
+diff --git a/Source/Core/Core/HW/EXI/EXI_Channel.cpp b/Source/Core/Core/HW/EXI/EXI_Channel.cpp
+--- a/Source/Core/Core/HW/EXI/EXI_Channel.cpp
++++ b/Source/Core/Core/HW/EXI/EXI_Channel.cpp
+@@ -107,7 +107,19 @@
+                    {
+                      IEXIDevice* device = GetDevice(m_status.CHIP_SELECT);
+                      if (device == nullptr)
++                     {
++                       // The EXI controller still clocks immediate transfers with
++                       // no chip selected. DIN is pulled high. The real Swiss
++                       // reload stub uses these deselected clocks to initialize SD.
++                       if (m_status.CHIP_SELECT == 0 && m_control.DMA == 0)
++                       {
++                         if (m_control.RW != EXI_WRITE)
++                           m_imm_data = 0xFFFFFFFF;
++                         m_control.TSTART = 0;
++                         SendTransferComplete();
++                       }
+                        return;
++                     }
+ 
+                      if (m_control.DMA == 0)
+                      {
+@@ -115,7 +127,12 @@
+                        switch (m_control.RW)
+                        {
+                        case EXI_READ:
+-                         m_imm_data = device->ImmRead(m_control.TLEN + 1);
++                         // An SD SPI read also shifts out the immediate register.
++                         // STUBHAXX sends commands using this receive-capable mode.
++                         if (device->m_device_type == EXIDeviceType::SDCard)
++                           device->ImmReadWrite(m_imm_data, m_control.TLEN + 1);
++                         else
++                           m_imm_data = device->ImmRead(m_control.TLEN + 1);
+                          break;
+                        case EXI_WRITE:
+                          device->ImmWrite(m_imm_data, m_control.TLEN + 1);
+diff --git a/Source/Core/Core/HW/EXI/EXI_DeviceSDCard.cpp b/Source/Core/Core/HW/EXI/EXI_DeviceSDCard.cpp
+--- a/Source/Core/Core/HW/EXI/EXI_DeviceSDCard.cpp
++++ b/Source/Core/Core/HW/EXI/EXI_DeviceSDCard.cpp
+@@ -582,11 +582,12 @@
+     else
+       byte = 0xFF;
+ 
+-    // During multi-block reads, watch for CMD12 (0x4C = 0x40 | 12)
+-    if (m_multi_block && (received & 0xC0) == 0x40)
++    // A new driver can reset the card while an earlier read is active.
++    // Keep recognizing CMD12 for multi-block stops and CMD0 for reinitialization.
++    if ((received & 0xC0) == 0x40)
+     {
+       const u8 cmd_idx = received & 0x3F;
+-      if (cmd_idx == SD_CMD12)
++      if (cmd_idx == SD_CMD0 || (m_multi_block && cmd_idx == SD_CMD12))
+       {
+         m_multi_block = false;
+         m_cmd_buf[0] = received;

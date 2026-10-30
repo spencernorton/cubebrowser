@@ -1,3 +1,36 @@
+## 2026-10-30 — Keep CI evidence writable and cache completed emulator builds
+
+The x86 job passed the older runtime routes and reproduced the exact Indigo
+fixture, then could not create its provenance directory: prior root containers
+had created the evidence parent. Create that parent as the runner before the
+first runtime container. Save the built emulator immediately after preparation,
+so a later fixture/test failure does not discard the expensive image cache.
+The required checks and guest DOLs retain their existing contracts.
+
+## 2026-10-30 — Check reloads with complete textures and motion off
+
+Use the harness's complete texture hashing for two DOLs reusing texture
+addresses. The motion-off replay restores the cube with this setting, matching
+the documented Dolphin sampling limitation. Repeat both return controls with
+motion off in required CI and require saved standalone animation to survive
+alongside colour/aspect. The guest browser and Indigo fixture stay unchanged.
+
+## 2026-10-30 — Exercise the real Indigo launch and reload path
+
+Require an actual Web-face launch and two return trips with the pinned green
+Indigo3d9512b2 fixture. Its fresh SDK build must match the published beta DOL
+45b371fe exactly. The candidate inherits Spice/wide over saved Indigo/4:3,
+returns through menu and toolbar, navigates the restored Home and preserves
+standalone appearance on the FAT image. Local cached-interpreter runs pass,
+including the normal animated profile; production DOL bytes remain unchanged.
+
+Dolphin's fixed HBReload hook stops at0x80001800. Skip it in the fresh profile
+without supplying cheat codes, so the real STUBHAXX stub executes. Patch the
+emulator's immediate deselected clocks, SD receive-mode outgoing bytes and
+reset recognition during an earlier read. Before/after traces isolate these
+model gaps. No fake loader or guest memory patch replaces the return. Physical
+adapters/cables and the installed console remain separate qualification.
+
 ## 2026-10-30 — Show native browser controls and clarify build downloads
 
 The README explains the product with a real interaction recording or a source-grounded

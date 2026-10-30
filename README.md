@@ -376,7 +376,10 @@ The named, versioned DOL launch contract is documented in
 The required build runs the saved HTML/CSS parser regressions with address
 and undefined-behavior sanitizers, then boots and uses the actual DOL in the
 emulator. It also rebuilds the browser at the package checkout path and requires
-identical DOL bytes. To run the parser cases locally with Clang:
+identical DOL bytes. A pinned Indigo build also launches the candidate and
+reloads its Home through both return controls, exercising the actual SD stub.
+See [runtime qualification](tests/runtime/README.md) for the model and physical
+coverage limits. To run the parser cases locally with Clang:
 
 ```sh
 sh tools/fuzz/run.sh --regressions
