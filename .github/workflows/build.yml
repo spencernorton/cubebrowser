@@ -26,7 +26,7 @@ jobs:
 
       - name: Cache the pinned emulator image
         id: emulator-cache
-        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: /tmp/cube-emulator.tar
           key: cube-emulator-amd64-${{ hashFiles('tests/runtime/Dockerfile', 'tests/runtime/dolphin/*.patch') }}
@@ -42,7 +42,7 @@ jobs:
 
       - name: Save the built emulator before runtime checks
         if: steps.emulator-cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: /tmp/cube-emulator.tar
           key: ${{ steps.emulator-cache.outputs.cache-primary-key }}
@@ -138,7 +138,7 @@ jobs:
 
       - name: Runtime evidence
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: browser-runtime-evidence
           path: runtime-evidence/
@@ -152,7 +152,7 @@ jobs:
           cp -r sd/gcbrowser package/
 
       - name: Upload result
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: cubebrowser
           path: package/
