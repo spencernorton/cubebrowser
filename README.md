@@ -1,9 +1,24 @@
-# CubeBrowser
+<h1 align="center">CubeBrowser</h1>
 
-A web browser for the Nintendo GameCube. It loads real websites over a wired
-network connection, including secure (HTTPS) sites, with pictures, page
-styles, tables and forms, all controlled with a standard GameCube controller.
-It runs as a `.dol` program launched from Swiss.
+<p align="center">
+  <strong>A web browser for the Nintendo GameCube.</strong><br>
+  Browse wired HTTP and HTTPS sites with a standard GameCube controller.
+</p>
+
+<p align="center">
+  <a href="#installing">Install</a> ·
+  <a href="#controls">Controls</a> ·
+  <a href="#building-from-source">Build from source</a> ·
+  <a href="#support">Support</a> ·
+  <a href="https://norvitech.com/indigo/">Indigo</a>
+</p>
+
+<p align="center">
+  <a href="https://github.com/spencernorton/cubebrowser/actions/workflows/build.yml"><img alt="Build CubeBrowser" src="https://github.com/spencernorton/cubebrowser/actions/workflows/build.yml/badge.svg?branch=main"></a>
+</p>
+
+CubeBrowser launches from Swiss or Indigo and renders pages with images,
+styles, tables and forms. This fork is maintained for Indigo.
 
 <p align="center"><picture><source media="(prefers-reduced-motion: reduce)" srcset="docs/demos/controller-walkthrough-still.png"><img src="docs/demos/controller-walkthrough.gif" width="640" alt="Use CubeBrowser’s bookmarks, menu, settings and address keyboard, follow a link and return to the previous page."></picture></p>
 
@@ -29,7 +44,9 @@ Component cables are optional; they unlock 480p video.
 
 ### 1. Get the files
 
-Download the latest **cubebrowser** build from [GitHub Actions](https://github.com/spencernorton/cubebrowser/actions/workflows/build.yml) (a GitHub account is required to download build artifacts). [Tagged builds](https://github.com/spencernorton/cubebrowser/releases) are listed separately; the Actions artifact follows current development. The zip contains:
+Sign in to GitHub and open the newest successful [main build](https://github.com/spencernorton/cubebrowser/actions/workflows/build.yml?query=branch%3Amain+is%3Asuccess).
+Under **Artifacts**, download **cubebrowser**. If the build artifact has
+expired, [build from source](#building-from-source). The zip contains:
 
 - `cubebrowser.dol`, the browser itself
 - a `gcbrowser` folder with `cacert.pem`, the list of trusted certificates
@@ -416,6 +433,12 @@ saved cases. Generated inputs stay in a temporary directory.
 The bundled fonts are DejaVu Sans (free license). For a rounder look, run
 `python3 tools/make_font.py` with your own `.ttf` files (bold, regular,
 italic, monospace).
+
+## Support
+
+- [Issues](https://github.com/spencernorton/cubebrowser/issues) for bugs and feature requests.
+- [Discussions](https://github.com/spencernorton/cubebrowser/discussions) for questions about setup and controls.
+- [Private vulnerability reporting](https://github.com/spencernorton/cubebrowser/security/advisories/new) for security reports.
 
 ---
 
